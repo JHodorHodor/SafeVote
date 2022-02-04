@@ -99,11 +99,39 @@ where DataType: field::FieldElement +
         self.field.mul(first.get_output(), second)
     }
 
-    fn process_mul(&mut self, _gate_id: usize, first: Box<gate::Gate<DataType>>, second: Box<gate::Gate<DataType>>) -> DataType {
-        // TODO: impl
+    fn process_mul(&mut self, gate_id: usize, first: Box<gate::Gate<DataType>>, second: Box<gate::Gate<DataType>>) -> DataType {
         let c = self.field.mul(first.get_output(), second.get_output());
 
-        c
+        // TODO: move to setup phase
+        let n_parties = self.circuit.get_n_parties();
+        let poly = polynomial::Polynomial::random(c, self.threshold, self.field.clone());
+
+        (0..n_parties)
+                .map(|i| (i, poly.eval(DataType::from(i + 1))))
+                .for_each(|(party, share)| {
+                    let party = party as usize;
+                    if party == self.id {
+                        self.shares[party].insert(gate_id, share);
+                    } else {
+                        self.txs[party].send(message::Message::new(self.id, party, gate_id, share));
+                    }
+                });
+
+        (0..n_parties as usize)
+                .for_each(|party| {
+                    while !self.shares[party].contains_key(&gate_id) {
+                        let msg = self.rx.recv();
+                        self.shares[party].insert(gate_id, msg.get_share());
+                    }
+                });
+
+        let result = (0..n_parties)
+                .map(|party| (self.shares[party as usize][&gate_id].clone(),
+                                poly.lagrange((0..n_parties).map(|i| DataType::from(i + 1)), DataType::from(party))))
+                .map(|(share, lagr)| self.field.mul(share, lagr))
+                .fold(self.field.zero(), |a, b| self.field.add(a, b));
+
+        result
     }
     
     fn process_output(&mut self, output: DataType) -> DataType {
