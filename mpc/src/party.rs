@@ -43,6 +43,7 @@ where DataType: field::FieldElement +
     pub fn run(mut self) -> DataType {
         info!("Running party {} with secret {}", self.id, self.secret);
 
+        let mut n_gates = 0;
         for (gate_id, mut gate) in self.circuit.clone() {
             match gate {
                 gate::Gate::Input { party, ref mut output } => {
@@ -58,10 +59,12 @@ where DataType: field::FieldElement +
                     *output = Some(self.process_mul(gate_id, first, second));
                 }
             }
+
+            n_gates += 1;
         }
 
         let output = self.circuit.get_output_gate().get_output();
-        let result = self.process_output(output);
+        let result = self.process_output(n_gates, output);
 
         info!("Party {} finished with output {}", self.id, result);
 
@@ -127,15 +130,49 @@ where DataType: field::FieldElement +
 
         let result = (0..n_parties)
                 .map(|party| (self.shares[party as usize][&gate_id].clone(),
-                                poly.lagrange((0..n_parties).map(|i| DataType::from(i + 1)), DataType::from(party))))
+                                polynomial::Polynomial::lagrange(
+                                    (0..n_parties).map(|i| DataType::from(i + 1)),
+                                    DataType::from(party),
+                                    self.field.clone()
+                                )))
                 .map(|(share, lagr)| self.field.mul(share, lagr))
                 .fold(self.field.zero(), |a, b| self.field.add(a, b));
 
         result
     }
     
-    fn process_output(&mut self, output: DataType) -> DataType {
-        // TODO: impl interpolate output shares
-        output
+    fn process_output(&mut self, n_gates: usize, output: DataType) -> DataType {
+        let n_parties = self.circuit.get_n_parties();
+
+        (0..n_parties)
+                .map(|i| (i, output.clone()))
+                .for_each(|(party, share)| {
+                    let party = party as usize;
+                    if party == self.id {
+                        self.shares[party].insert(n_gates, share);
+                    } else {
+                        self.txs[party].send(message::Message::new(self.id, party, n_gates, share));
+                    }
+                });
+
+        (0..n_parties as usize)
+                .for_each(|party| {
+                    while !self.shares[party].contains_key(&n_gates) {
+                        let msg = self.rx.recv();
+                        self.shares[party].insert(n_gates, msg.get_share());
+                    }
+                });
+
+        let result = (0..n_parties)
+                .map(|party| (self.shares[party as usize][&n_gates].clone(),
+                    polynomial::Polynomial::lagrange(
+                        (0..n_parties).map(|i| DataType::from(i + 1)),
+                        DataType::from(party),
+                        self.field.clone()
+                    )))
+                .map(|(share, lagr)| self.field.mul(share, lagr))
+                .fold(self.field.zero(), |a, b| self.field.add(a, b));
+        
+        result
     }
 }
