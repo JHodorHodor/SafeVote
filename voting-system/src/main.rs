@@ -1,8 +1,13 @@
-use druid::widget::{Button, Flex, Label};
-use druid::{AppLauncher, Widget, WidgetExt, WindowDesc, Data, Lens, Env};
+use druid::{
+	widget::{prelude::*, Button, Flex, Label},
+	AppLauncher, Widget, WidgetExt, WindowDesc, Data, Lens, Env,
+};
 use std::net::{TcpStream};
 use std::io::{Read, Write};
 use std::str::from_utf8;
+
+mod command;
+mod controller;
 
 
 #[derive(Clone, Data, Lens)]
@@ -30,7 +35,7 @@ fn main() {
 		    let input = b"READY";
 		    stream.write(input).unwrap();
 
-		    /*let options_num = text.split(",").collect::<Vec<&str>>().len();
+		    let options_num = text.split(",").collect::<Vec<&str>>().len();
 		    let main_window = WindowDesc::new(move || ui_builder(options_num, stream))
 		        .title("Take a vote!")
 		        .window_size((300.0, 500.0));
@@ -43,14 +48,14 @@ fn main() {
 
 		    AppLauncher::with_window(main_window)
 		        .launch(params)
-		        .expect("Failed to launch application");*/
+		        .expect("Failed to launch application");
         },
         Err(e) => {
             panic!("Failed to connect: {}", e);
         }
     }
 }
-/*
+
 fn ui_builder(options_num: usize, stream: TcpStream) -> impl Widget<Params> {
 
     let buttons_group = (0..options_num).fold(
@@ -59,11 +64,11 @@ fn ui_builder(options_num: usize, stream: TcpStream) -> impl Widget<Params> {
     		Button::new(
     			move |data: &Params, _env: &Env| data.options.split(",").collect::<Vec<&str>>()[i].to_string()
     		).on_click(
-    			move |_ctx, data: &mut Params, _env| {
+    			move |ctx: &mut EventCtx, data: &mut Params, _env| {
     				if !data.is_picked {
 	    				data.is_picked = true;
 	    				println!("Voted for {}", i);
-	    				vote(i as u8, stream);
+						ctx.submit_command(command::VOTE.with(i as u8));
     				}
     			}
     		)
@@ -79,12 +84,5 @@ fn ui_builder(options_num: usize, stream: TcpStream) -> impl Widget<Params> {
         	}
         }))
         .with_child(buttons_group)
+		.controller(controller::VoteChoiceController::new(stream))
 }
-
-
-fn vote(input: u8, stream: TcpStream) -> u8 {
-    let input = b"READY";
-    stream.write(input).unwrap();
-    0
-}
-*/
