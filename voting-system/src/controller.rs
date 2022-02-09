@@ -4,6 +4,7 @@ use druid::{
 };
 use std::net::{TcpStream};
 use std::io::{Read, Write};
+use std::str::from_utf8;
 
 use crate::command;
 use crate::Params;
@@ -57,8 +58,35 @@ impl VoteChoiceController {
     }
 
     fn vote(&mut self, _input: u8) -> u8 {
-        let input = b"READY";
+        let input = b"VOTED";
         self.stream.write(input).unwrap();
+
+
+        let mut data = [0 as u8; 500];
+
+        match self.stream.read(&mut data) {
+            Ok(size) => {
+                println!("{}", from_utf8(&data[0..size]).unwrap());
+            },
+            Err(_) => {
+                println!("Error");
+            },
+        }
+
+        let input = b"test_msg_to_all";
+        self.stream.write(input).unwrap();
+
+        while match self.stream.read(&mut data) {
+            Ok(size) => {
+                println!("received: {}", from_utf8(&data[0..size]).unwrap());
+                true
+            },
+            Err(_) => {
+                println!("Error");
+                false
+            },
+        } {}
+
         0
     }
 }

@@ -2,28 +2,27 @@ use std::thread;
 use std::net::{TcpListener, TcpStream, SocketAddr, Shutdown};
 use std::io::{Read, Write};
 use std::str::from_utf8;
-use std::collections::HashSet;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::env;
 
 static GLOBAL_VOTERS_COUNT: AtomicUsize = AtomicUsize::new(0);
 static EXPECTED_VOTERS: usize = 3;
 
 
-fn initialize_client(mut stream: TcpStream) {
+fn initialize_client(mut stream: TcpStream, options: &str) {
 
-    let options = b"Ala,Kot,Kasia,Someone";
-    stream.write(options).unwrap();
+    stream.write(options.as_bytes()).unwrap();
 
     let mut data = [0 as u8; 500];
     match stream.read(&mut data) {
         Ok(size) => {
             println!("{}", from_utf8(&data[0..size]).unwrap());
-            if from_utf8(&data[0..size]).unwrap() == "READY" {
+            if from_utf8(&data[0..size]).unwrap() == "VOTED" {
                 GLOBAL_VOTERS_COUNT.fetch_add(1, Ordering::SeqCst);
                 if GLOBAL_VOTERS_COUNT.load(Ordering::SeqCst) >= EXPECTED_VOTERS {       
                     match TcpStream::connect("localhost:3333") {
                         Ok(_) => {
-                            println!("All ready!");
+                            println!("All ready - from now on all data will be proxied between voters");
                         },
                         Err(e) => {
                             panic!("Failed to connect: {}", e);
@@ -38,6 +37,9 @@ fn initialize_client(mut stream: TcpStream) {
 
 fn proxy_data(mut read_stram: TcpStream, write_streams: Vec<TcpStream>) {
     let mut data = [0 as u8; 500];
+
+    let options = b"Proxy Opened!";
+    read_stram.write(options).unwrap();
 
     while match read_stram.read(&mut data) {
         Ok(size) => {
@@ -57,9 +59,10 @@ fn proxy_data(mut read_stram: TcpStream, write_streams: Vec<TcpStream>) {
 
 fn main() {
 
+    let options: String = env::args().collect::<Vec<String>>().get(1).unwrap().to_string();
+
     let listener = TcpListener::bind("0.0.0.0:3333").unwrap();
-    let local_addr = listener.local_addr().unwrap();
-    println!("Server listening on port 3333");
+    println!("Server starting with options {} on port 3333", options);
 
     let mut voters_streams: Vec<(TcpStream, SocketAddr)> = Vec::new();
 
@@ -70,8 +73,7 @@ fn main() {
                 println!("New voter: {}", stream.peer_addr().unwrap());
                 println!("{}", GLOBAL_VOTERS_COUNT.load(Ordering::SeqCst));
                 if GLOBAL_VOTERS_COUNT.load(Ordering::SeqCst) >= EXPECTED_VOTERS {
-                    stream.shutdown(Shutdown::Both);
-                    println!("All have voted!");
+                    println!("All voters have voted!");
 
                     let mut voters_streams_tmp: Vec<(TcpStream, SocketAddr)> = Vec::new();
                     for (next_stream, next_addr) in &voters_streams {
@@ -87,7 +89,8 @@ fn main() {
                     }
                 } else {
                     voters_streams.push((stream.try_clone().unwrap(), addr));
-                    thread::spawn(move || initialize_client(stream));
+                    let options_cloned = options.clone();
+                    thread::spawn(move || initialize_client(stream, &options_cloned));
                 }
             }
             Err(e) => {

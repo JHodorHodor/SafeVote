@@ -3,7 +3,7 @@ use druid::{
 	AppLauncher, Widget, WidgetExt, WindowDesc, Data, Lens, Env,
 };
 use std::net::{TcpStream};
-use std::io::{Read, Write};
+use std::io::{Read};
 use std::str::from_utf8;
 
 mod command;
@@ -32,8 +32,6 @@ fn main() {
                 }
             };
 		    println!("Options received.");
-		    let input = b"READY";
-		    stream.write(input).unwrap();
 
 		    let options_num = text.split(",").collect::<Vec<&str>>().len();
 		    let main_window = WindowDesc::new(move || ui_builder(options_num, stream))
