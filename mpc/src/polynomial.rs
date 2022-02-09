@@ -24,4 +24,16 @@ impl<DataType: field::FieldElement + Clone> Polynomial<DataType> {
 
         result
     }
+
+    pub fn lagrange(knots: impl Iterator<Item = DataType>, i: DataType, field: field::Field<DataType>) -> DataType {
+        knots
+            .map(|knot| {
+                if knot == i {
+                    field.one()
+                } else {
+                    field.mul(knot.clone(), field.inv(field.sub(knot, i.clone())))
+                }
+            })
+            .fold(field.one(), |a, b| field.mul(a, b))
+    }
 }
