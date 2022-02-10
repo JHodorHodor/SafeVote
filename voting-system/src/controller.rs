@@ -6,6 +6,16 @@ use std::net::{TcpStream};
 use std::io::{Read, Write};
 use std::str::from_utf8;
 
+use mpc::{
+    party::Party,
+    field::Field,
+    circuit::Circuit,
+    gate::Gate,
+    message::Message,
+    share_receiver::ShareReceiver,
+    share_sender::ShareSender,
+};
+
 use crate::command;
 use crate::Params;
 
@@ -87,6 +97,38 @@ impl VoteChoiceController {
             },
         } {}
 
-        0
+        let rx = ShareStream(self.stream.try_clone().unwrap());
+        let tx = ShareStream(self.stream.try_clone().unwrap());
+
+        Party::new(0, _input, Box::new(rx), vec![Box::new(tx)],
+            Field::new(97),
+            Circuit::new(Gate::<u8>::new_input(0), 1),
+            1).run()
+    }
+}
+
+struct ShareStream(TcpStream);
+
+// TODO: use e.g. serde for (de)serialization of Message<>
+
+impl ShareReceiver<Message<u8>> for ShareStream {
+    fn recv(&mut self) -> Message<u8> {
+        let mut data = [0u8; std::mem::size_of::<Message<u8>>()];
+        self.0.read(&mut data);
+        unsafe { std::mem::transmute(data) }
+    }
+}
+
+unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
+    ::std::slice::from_raw_parts(
+        (p as *const T) as *const u8,
+        ::std::mem::size_of::<T>(),
+    )
+}
+
+impl ShareSender<Message<u8>> for ShareStream {
+    fn send(&mut self, msg: Message<u8>) {
+        let data = unsafe { any_as_u8_slice(&msg) };
+        self.0.write(data);
     }
 }

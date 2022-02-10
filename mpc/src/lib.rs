@@ -16,7 +16,8 @@ mod tests {
         let rx = ShareReceiver { msg: None };
         let tx = ShareSender { chan: Rc::new(RefCell::new(rx.clone())) };
         
-        let party = super::party::Party::new(0, 1, Box::new(rx), vec![Box::new(tx)], super::field::Field::new(97),
+        let party = super::party::Party::new(0, 1, Box::new(rx), vec![Box::new(tx)],
+            super::field::Field::new(97),
             super::circuit::Circuit::new(super::gate::Gate::<u8>::new_input(0), 1),
             1);
         assert_eq!(party.run(), 1);
