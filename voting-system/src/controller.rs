@@ -20,13 +20,17 @@ use crate::Params;
 pub struct VoteChoiceController {
     stream: TcpStream,
     id: usize,
+    number_of_voters: usize,
+    vote_treshold: usize,
 }
 
 impl VoteChoiceController {
-    pub fn new(stream: TcpStream, id: usize) -> Self {
+    pub fn new(stream: TcpStream, id: usize, number_of_voters: usize, vote_treshold: usize) -> Self {
         VoteChoiceController {
             stream,
             id,
+            number_of_voters,
+            vote_treshold,
         }
     }
 }
@@ -73,22 +77,17 @@ impl VoteChoiceController {
         let input = b"VOTED";
         self.stream.write(input).unwrap();
 
-
         let mut data = [0 as u8; 500];
 
         match self.stream.read(&mut data) {
-            Ok(size) => {
-                println!("{}", from_utf8(&data[0..size]).unwrap());
-            },
-            Err(_) => {
-                println!("Error");
-            },
-        }
+            Ok(_) => println!("Protocol started!"),
+            Err(_) => println!("Error"),
+        };
 
-        let rx = ShareStream(self.stream.try_clone().unwrap());
-        let tx0 = ShareStream(self.stream.try_clone().unwrap());
-        let tx1 = ShareStream(self.stream.try_clone().unwrap());
-        let tx2 = ShareStream(self.stream.try_clone().unwrap());
+        let rx = ShareStream(self.stream.try_clone().unwrap(), self.number_of_voters);
+        let tx0 = ShareStream(self.stream.try_clone().unwrap(), self.number_of_voters);
+        let tx1 = ShareStream(self.stream.try_clone().unwrap(), self.number_of_voters);
+        let tx2 = ShareStream(self.stream.try_clone().unwrap(), self.number_of_voters);
 
         Party::new(self.id, _input, Box::new(rx), vec![Box::new(tx0), Box::new(tx1), Box::new(tx2)],
             Field::new(13),
@@ -97,9 +96,10 @@ impl VoteChoiceController {
     }
 }
 
-struct ShareStream(TcpStream);
+struct ShareStream(TcpStream, usize);
 
 // TODO: use e.g. serde for (de)serialization of Message<>
+
 
 impl ShareReceiver<Message<u8>> for ShareStream {
     fn recv(&mut self) -> Message<u8> {
@@ -119,6 +119,7 @@ unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
 
 impl ShareSender<Message<u8>> for ShareStream {
     fn send(&mut self, msg: Message<u8>) {
+        self.0.write(&(msg.to as u32).to_be_bytes()).unwrap();
         let data = unsafe { any_as_u8_slice(&msg) };
         self.0.write(data).unwrap_or_else(|_e| { println!("Error send"); 0 });
     }
