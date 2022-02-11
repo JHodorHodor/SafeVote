@@ -86,12 +86,14 @@ impl VoteChoiceController {
         }
 
         let rx = ShareStream(self.stream.try_clone().unwrap());
-        let tx = ShareStream(self.stream.try_clone().unwrap());
+        let tx0 = ShareStream(self.stream.try_clone().unwrap());
+        let tx1 = ShareStream(self.stream.try_clone().unwrap());
+        let tx2 = ShareStream(self.stream.try_clone().unwrap());
 
-        Party::new(self.id, _input, Box::new(rx), vec![Box::new(tx)],
+        Party::new(self.id, _input, Box::new(rx), vec![Box::new(tx0), Box::new(tx1), Box::new(tx2)],
             Field::new(97),
-            Circuit::new(Gate::<u8>::new_input(0), 1),
-            1).run()
+            Circuit::new(Gate::<u8>::new_input(0), 3),
+            2).run()
     }
 }
 
