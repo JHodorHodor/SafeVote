@@ -1,5 +1,5 @@
 use std::thread;
-use std::net::{TcpListener, TcpStream, SocketAddr, Shutdown};
+use std::net::{TcpListener, TcpStream, SocketAddr};
 use std::io::{Read, Write};
 use std::str::from_utf8;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -59,7 +59,10 @@ fn proxy_data(mut read_stram: TcpStream, write_streams: Vec<TcpStream>) {
 
 fn main() {
 
-    let options: String = env::args().collect::<Vec<String>>().get(1).unwrap().to_string();
+    let options: String = match env::args().collect::<Vec<String>>().get(1) {
+        Some(options) => options,
+        None => panic!("Specify what vote options are available!"),
+    }.to_string();
 
     let listener = TcpListener::bind("0.0.0.0:3333").unwrap();
     println!("Server starting with options {} on port 3333", options);

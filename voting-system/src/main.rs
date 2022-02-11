@@ -1,10 +1,11 @@
 use druid::{
-	widget::{prelude::*, Button, Flex, Label},
+	widget::{prelude::*, Button, Flex, Label, Either},
 	AppLauncher, Widget, WidgetExt, WindowDesc, Data, Lens, Env,
 };
 use std::net::{TcpStream};
 use std::io::{Read};
 use std::str::from_utf8;
+use std::env;
 
 mod command;
 mod controller;
@@ -17,6 +18,14 @@ struct Params {
 }
 
 fn main() {
+
+    let id: usize = match env::args().collect::<Vec<String>>().get(1) {
+        Some(id) => match id.parse::<usize>() {
+            Ok(id) => id,
+            _ => panic!("Client id should be a non-negative integer!")
+        },
+        None => panic!("Specify client id!"),
+    };
 
     match TcpStream::connect("localhost:3333") {
         Ok(mut stream) => {
@@ -34,7 +43,7 @@ fn main() {
 		    println!("Options received.");
 
 		    let options_num = text.split(",").collect::<Vec<&str>>().len();
-		    let main_window = WindowDesc::new(move || ui_builder(options_num, stream))
+		    let main_window = WindowDesc::new(move || ui_builder(options_num, stream, id))
 		        .title("Take a vote!")
 		        .window_size((300.0, 500.0));
 
@@ -54,7 +63,7 @@ fn main() {
     }
 }
 
-fn ui_builder(options_num: usize, stream: TcpStream) -> impl Widget<Params> {
+fn ui_builder(options_num: usize, stream: TcpStream, id: usize) -> impl Widget<Params> {
 
     let buttons_group = (0..options_num).fold(
     	Flex::column(),
@@ -81,6 +90,10 @@ fn ui_builder(options_num: usize, stream: TcpStream) -> impl Widget<Params> {
         		"Options:".to_string()
         	}
         }))
-        .with_child(buttons_group)
-		.controller(controller::VoteChoiceController::new(stream))
+        .with_child(Either::new(
+            |data: &Params, _env: &Env| data.is_picked,
+            Flex::column(),
+            buttons_group,
+        ))
+		.controller(controller::VoteChoiceController::new(stream, id))
 }
