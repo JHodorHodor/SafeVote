@@ -1,9 +1,9 @@
 #[derive(Clone)]
 pub struct Message<DataType> {
-    from: usize,
-    to: usize,
+    pub from: usize,
+    pub to: usize,
 
-    gate: usize,
+    pub gate: usize,
 
     share: DataType
 }

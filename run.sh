@@ -1,5 +1,5 @@
 cargo build
-cargo run -p voting-server -- 1,2,3 &
-cargo run -p voting-system -- 0 & 
-cargo run -p voting-system -- 1 &
-cargo run -p voting-system -- 2 &
+cargo run -p voting-server -- A,B &
+RUST_LOG=$1 cargo run -p voting-system -- 0 & 
+RUST_LOG=$1 cargo run -p voting-system -- 1 &
+RUST_LOG=$1 cargo run -p voting-system -- 2 &

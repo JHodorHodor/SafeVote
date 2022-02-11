@@ -43,9 +43,10 @@ fn proxy_data(mut read_stram: TcpStream, write_streams: Vec<TcpStream>) {
 
     while match read_stram.read(&mut data) {
         Ok(size) => {
-            println!("{}", from_utf8(&data[0..size]).unwrap());
+            println!("received {}", size);
+            //println!("{}", from_utf8(&data[0..size]).unwrap());
             for mut w_stm in write_streams.iter() {
-                println!("{}", from_utf8(&data[0..size]).unwrap());
+                //println!("{}", from_utf8(&data[0..size]).unwrap());
                 w_stm.write(&data[0..size]).unwrap();
             }
             true

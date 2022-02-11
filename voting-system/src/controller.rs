@@ -9,8 +9,6 @@ use std::str::from_utf8;
 use mpc::{
     party::Party,
     field::Field,
-    circuit::Circuit,
-    gate::Gate,
     message::Message,
     share_receiver::ShareReceiver,
     share_sender::ShareSender,
@@ -52,6 +50,8 @@ where
     }
 }
 
+use crate::util::generate_circuit;
+
 impl VoteChoiceController {
     fn command(
         &mut self,
@@ -91,8 +91,8 @@ impl VoteChoiceController {
         let tx2 = ShareStream(self.stream.try_clone().unwrap());
 
         Party::new(self.id, _input, Box::new(rx), vec![Box::new(tx0), Box::new(tx1), Box::new(tx2)],
-            Field::new(97),
-            Circuit::new(Gate::<u8>::new_input(0), 3),
+            Field::new(13),
+            generate_circuit(),
             2).run()
     }
 }
@@ -105,14 +105,7 @@ impl ShareReceiver<Message<u8>> for ShareStream {
     fn recv(&mut self) -> Message<u8> {
         let mut data = [0u8; std::mem::size_of::<Message<u8>>()];
 
-        match self.0.read(&mut data) {
-            Ok(size) => {
-                println!("{}", from_utf8(&data[0..size]).unwrap());
-            },
-            Err(_) => {
-                println!("Error");
-            },
-        }
+        self.0.read(&mut data).unwrap_or_else(|_e| { println!("Error recv"); 0 });
         unsafe { std::mem::transmute(data) }
     }
 }
@@ -127,7 +120,6 @@ unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
 impl ShareSender<Message<u8>> for ShareStream {
     fn send(&mut self, msg: Message<u8>) {
         let data = unsafe { any_as_u8_slice(&msg) };
-        println!("send: {:?}", data);
-        self.0.write(data).unwrap();
+        self.0.write(data).unwrap_or_else(|_e| { println!("Error send"); 0 });
     }
 }

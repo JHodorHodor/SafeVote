@@ -9,6 +9,7 @@ use std::env;
 
 mod command;
 mod controller;
+mod util;
 
 
 #[derive(Clone, Data, Lens)]
@@ -18,6 +19,7 @@ struct Params {
 }
 
 fn main() {
+	env_logger::init();
 
     let id: usize = match env::args().collect::<Vec<String>>().get(1) {
         Some(id) => match id.parse::<usize>() {
