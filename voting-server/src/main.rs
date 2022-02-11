@@ -7,6 +7,7 @@ use std::str::from_utf8;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::env;
 use std::convert::TryInto;
+use std::collections::HashMap;
 
 
 static GLOBAL_VOTERS_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -48,18 +49,29 @@ fn initialize_client(mut stream: TcpStream, VOTE_OPTIONS: VoteOptions) {
     }
 }
 
-fn proxy_data(mut read_stram: TcpStream, write_streams: Vec<TcpStream>) {
+fn proxy_data(mut read_stram: TcpStream, id: usize, write_streams: HashMap<usize, TcpStream>) {
     let mut data = [0 as u8; 500];
 
-    let options = b"Proxy Opened!";
-    read_stram.write(options).unwrap();
+    let start_protocol_info = b"Proxy Opened!";
+    read_stram.write(start_protocol_info).unwrap();
 
     while match read_stram.read(&mut data) {
-        Ok(size) => {
-            println!("{}", from_utf8(&data[0..size]).unwrap());
-            for mut w_stm in write_streams.iter() {
-                println!("{}", from_utf8(&data[0..size]).unwrap());
-                w_stm.write(&data[0..size]).unwrap();
+        Ok(_) => {
+            let (id_bytes, _rest) = data.split_at(std::mem::size_of::<u32>());
+            let rcvr_id = u32::from_be_bytes(id_bytes.try_into().unwrap()) as usize;
+
+            println!("Msg from {} to {}", id, rcvr_id);
+
+            match read_stram.read(&mut data) {
+                Ok(size) => {
+                    match write_streams.get(&rcvr_id) {
+                        Some(mut stream) => {
+                            stream.write(&data[0..size]).unwrap();
+                        },
+                        None => println!("Error"),
+                    };
+                },
+                Err(_) => println!("Error"),
             }
             true
         },
@@ -117,12 +129,17 @@ fn main() {
                         voters_streams_tmp.push((next_stream.try_clone().unwrap(), next_id.clone()));
                     }
                     for (next_stream, next_id) in &voters_streams {
-                        voters_streams_tmp.iter();
-                        let streams_clones: Vec<TcpStream> = voters_streams_tmp.iter()
+
+                        let mut other_streams_map = HashMap::new();
+                        voters_streams_tmp.iter()
                             .filter(|(_, other_id)| next_id != other_id)
-                            .map(|(other_stream, _)| other_stream.try_clone().unwrap()).collect();
+                            .for_each(|(other_stream, other_id)| {
+                                other_streams_map.insert(other_id.clone(), other_stream.try_clone().unwrap());
+                            }
+                        );
                         let next_stream_clone = next_stream.try_clone().unwrap();
-                        thread::spawn(move || proxy_data(next_stream_clone, streams_clones));
+                        let next_id_clone = next_id.clone();
+                        thread::spawn(move || proxy_data(next_stream_clone, next_id_clone, other_streams_map));
                     }
                 } else {
                     // Receive party id

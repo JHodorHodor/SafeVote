@@ -109,9 +109,7 @@ impl ShareReceiver<Message<u8>> for ShareStream {
             Ok(size) => {
                 println!("{}", from_utf8(&data[0..size]).unwrap());
             },
-            Err(_) => {
-                println!("Error");
-            },
+            Err(_) => println!("Error"),
         }
         unsafe { std::mem::transmute(data) }
     }
@@ -126,8 +124,9 @@ unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
 
 impl ShareSender<Message<u8>> for ShareStream {
     fn send(&mut self, msg: Message<u8>) {
+        self.0.write(&(msg.to as u32).to_be_bytes()).unwrap();
         let data = unsafe { any_as_u8_slice(&msg) };
-        println!("send: {:?}", data);
+        println!("send: {:?} to {}", data, msg.to);
         self.0.write(data).unwrap();
     }
 }
