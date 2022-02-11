@@ -3,9 +3,10 @@ use druid::{
 	AppLauncher, Widget, WidgetExt, WindowDesc, Data, Lens, Env,
 };
 use std::net::{TcpStream};
-use std::io::{Read};
+use std::io::{Read, Write};
 use std::str::from_utf8;
 use std::env;
+use std::convert::TryInto;
 
 mod command;
 mod controller;
@@ -31,26 +32,46 @@ fn main() {
         Ok(mut stream) => {
             println!("Successfully connected to server in port 3333");
 
+            // Send party id to server
+            let input = (id as u32).to_be_bytes();
+            stream.write(&input).unwrap();
+
+
+            // Receive votig options
             let mut data = [0 as u8; 500];
-            let text = match stream.read(&mut data) {
+            let number_of_voters = match stream.read(&mut data) {
+                Ok(_) => {
+                    let (id_bytes, _rest) = data.split_at(std::mem::size_of::<u32>());
+                    u32::from_be_bytes(id_bytes.try_into().unwrap()) as usize
+                },
+                Err(e) => panic!("Failed to receive data: {}", e)
+            };
+            let vote_treshold = match stream.read(&mut data) {
+                Ok(_) => {
+                    let (id_bytes, _rest) = data.split_at(std::mem::size_of::<u32>());
+                    u32::from_be_bytes(id_bytes.try_into().unwrap()) as usize
+                },
+                Err(e) => panic!("Failed to receive data: {}", e)
+            };
+            let voting_options = match stream.read(&mut data) {
                 Ok(size) => {
                 	from_utf8(&data[0..size]).unwrap().to_string()
                 },
-                Err(e) => {
-                    panic!("Failed to receive data: {}", e);
-                }
+                Err(e) => panic!("Failed to receive data: {}", e)
             };
-		    println!("Options received.");
 
-		    let options_num = text.split(",").collect::<Vec<&str>>().len();
-		    let main_window = WindowDesc::new(move || ui_builder(options_num, stream, id))
+		    println!("Options received: number of voters: {};  vote treshold: {}; voting options: {}.", number_of_voters, vote_treshold, voting_options);
+
+            // Init UI
+		    let options_num = voting_options.split(",").collect::<Vec<&str>>().len();
+		    let main_window = WindowDesc::new(move || ui_builder(options_num, stream, id, number_of_voters, vote_treshold))
 		        .title("Take a vote!")
 		        .window_size((300.0, 500.0));
 
-		    println!("{}", text);
+		    println!("{}", voting_options);
 		    let params = Params {
 		        is_picked: false,
-		        options: text,
+		        options: voting_options,
 		    };
 
 		    AppLauncher::with_window(main_window)
@@ -63,7 +84,7 @@ fn main() {
     }
 }
 
-fn ui_builder(options_num: usize, stream: TcpStream, id: usize) -> impl Widget<Params> {
+fn ui_builder(options_num: usize, stream: TcpStream, id: usize, number_of_voters: usize, vote_treshold: usize) -> impl Widget<Params> {
 
     let buttons_group = (0..options_num).fold(
     	Flex::column(),
@@ -95,5 +116,5 @@ fn ui_builder(options_num: usize, stream: TcpStream, id: usize) -> impl Widget<P
             Flex::column(),
             buttons_group,
         ))
-		.controller(controller::VoteChoiceController::new(stream, id))
+		.controller(controller::VoteChoiceController::new(stream, id, number_of_voters, vote_treshold))
 }
