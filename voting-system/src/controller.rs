@@ -21,12 +21,14 @@ use crate::Params;
 
 pub struct VoteChoiceController {
     stream: TcpStream,
+    id: usize,
 }
 
 impl VoteChoiceController {
-    pub fn new(stream: TcpStream) -> Self {
+    pub fn new(stream: TcpStream, id: usize) -> Self {
         VoteChoiceController {
-            stream
+            stream,
+            id,
         }
     }
 }
@@ -83,24 +85,10 @@ impl VoteChoiceController {
             },
         }
 
-        let input = b"test_msg_to_all";
-        self.stream.write(input).unwrap();
-
-        while match self.stream.read(&mut data) {
-            Ok(size) => {
-                println!("received: {}", from_utf8(&data[0..size]).unwrap());
-                true
-            },
-            Err(_) => {
-                println!("Error");
-                false
-            },
-        } {}
-
         let rx = ShareStream(self.stream.try_clone().unwrap());
         let tx = ShareStream(self.stream.try_clone().unwrap());
 
-        Party::new(0, _input, Box::new(rx), vec![Box::new(tx)],
+        Party::new(self.id, _input, Box::new(rx), vec![Box::new(tx)],
             Field::new(97),
             Circuit::new(Gate::<u8>::new_input(0), 1),
             1).run()
@@ -114,7 +102,15 @@ struct ShareStream(TcpStream);
 impl ShareReceiver<Message<u8>> for ShareStream {
     fn recv(&mut self) -> Message<u8> {
         let mut data = [0u8; std::mem::size_of::<Message<u8>>()];
-        self.0.read(&mut data);
+
+        match self.0.read(&mut data) {
+            Ok(size) => {
+                println!("{}", from_utf8(&data[0..size]).unwrap());
+            },
+            Err(_) => {
+                println!("Error");
+            },
+        }
         unsafe { std::mem::transmute(data) }
     }
 }
@@ -129,6 +125,6 @@ unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
 impl ShareSender<Message<u8>> for ShareStream {
     fn send(&mut self, msg: Message<u8>) {
         let data = unsafe { any_as_u8_slice(&msg) };
-        self.0.write(data);
+        self.0.write(data).unwrap();
     }
 }
