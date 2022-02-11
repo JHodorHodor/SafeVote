@@ -83,22 +83,12 @@ impl VoteChoiceController {
             },
         }
 
-        let input = b"test_msg_to_all";
-        self.stream.write(input).unwrap();
-
-        while match self.stream.read(&mut data) {
-            Ok(size) => {
-                println!("received: {}", from_utf8(&data[0..size]).unwrap());
-                true
-            },
-            Err(_) => {
-                println!("Error");
-                false
-            },
-        } {}
+        println!("vote(): here1");
 
         let rx = ShareStream(self.stream.try_clone().unwrap());
         let tx = ShareStream(self.stream.try_clone().unwrap());
+
+        println!("vote(): here2");
 
         Party::new(0, _input, Box::new(rx), vec![Box::new(tx)],
             Field::new(97),
@@ -129,6 +119,7 @@ unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
 impl ShareSender<Message<u8>> for ShareStream {
     fn send(&mut self, msg: Message<u8>) {
         let data = unsafe { any_as_u8_slice(&msg) };
+        println!("send: {:?}", data);
         self.0.write(data);
     }
 }

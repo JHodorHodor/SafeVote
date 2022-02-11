@@ -34,6 +34,7 @@ where DataType: field::FieldElement +
                 circuit: circuit::Circuit<DataType>,
                 threshold: usize) -> Self {
         let n_parties = circuit.get_n_parties() as usize;
+        println!("Party::new(): {}/{}", id, n_parties);
         Party {
             id, secret, rx, txs, field, circuit, threshold,
             shares: vec![HashMap::new(); n_parties]
@@ -42,36 +43,42 @@ where DataType: field::FieldElement +
 
     pub fn run(mut self) -> DataType {
         info!("Running party {} with secret {}", self.id, self.secret);
+        println!("Running party {} with secret {}", self.id, self.secret);
 
         let mut n_gates = 0;
+        let mut output_gate = None;
         for (gate_id, mut gate) in self.circuit.clone() {
+            println!("Party{}: processing gate {}", self.id, gate_id);
             match gate {
-                gate::Gate::Input { party, ref mut output } => {
-                    *output = Some(self.process_input(gate_id, party));
+                gate::Gate::Input { ref party, ref mut output } => {
+                    *output = Some(self.process_input(gate_id, *party));
                 }
-                gate::Gate::Add { first, second, ref mut output } => {
+                gate::Gate::Add { ref first, ref second, ref mut output } => {
                     *output = Some(self.process_add(gate_id, first, second));
                 }
-                gate::Gate::MulByConst { first, second, ref mut output } => {
-                    *output = Some(self.process_mul_by_const(gate_id, first, second));
+                gate::Gate::MulByConst { ref first, ref second, ref mut output } => {
+                    *output = Some(self.process_mul_by_const(gate_id, first, second.clone()));
                 }
-                gate::Gate::Mul { first, second, ref mut output } => {
+                gate::Gate::Mul { ref first, ref second, ref mut output } => {
                     *output = Some(self.process_mul(gate_id, first, second));
                 }
             }
 
             n_gates += 1;
+            output_gate = Some(gate);
         }
 
-        let output = self.circuit.get_output_gate().get_output();
+        let output = output_gate.unwrap().get_output();
         let result = self.process_output(n_gates, output);
 
         info!("Party {} finished with output {}", self.id, result);
+        println!("Party {} finished with output {}", self.id, result);
 
         result
     }
 
     fn process_input(&mut self, gate_id: usize, party: usize) -> DataType {
+        println!("Party{}: process_input({}, {})", self.id, gate_id, party);
         if self.id == party {
             let poly = polynomial::Polynomial::random(self.secret.clone(), self.threshold, self.field.clone());
             (0..self.circuit.get_n_parties())
@@ -91,18 +98,20 @@ where DataType: field::FieldElement +
             }
         }
 
+        println!("computed shares");
+
         self.shares[party][&gate_id].clone()
     }
 
-    fn process_add(&self, _gate_id: usize, first: Box<gate::Gate<DataType>>, second: Box<gate::Gate<DataType>>) -> DataType {
+    fn process_add(&self, _gate_id: usize, first: &Box<gate::Gate<DataType>>, second: &Box<gate::Gate<DataType>>) -> DataType {
         self.field.add(first.get_output(), second.get_output())
     }
 
-    fn process_mul_by_const(&mut self, _gate_id: usize, first: Box<gate::Gate<DataType>>, second: DataType) -> DataType {
+    fn process_mul_by_const(&mut self, _gate_id: usize, first: &Box<gate::Gate<DataType>>, second: DataType) -> DataType {
         self.field.mul(first.get_output(), second)
     }
 
-    fn process_mul(&mut self, gate_id: usize, first: Box<gate::Gate<DataType>>, second: Box<gate::Gate<DataType>>) -> DataType {
+    fn process_mul(&mut self, gate_id: usize, first: &Box<gate::Gate<DataType>>, second: &Box<gate::Gate<DataType>>) -> DataType {
         let c = self.field.mul(first.get_output(), second.get_output());
 
         // TODO: move to setup phase
