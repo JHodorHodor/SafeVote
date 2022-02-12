@@ -4,7 +4,6 @@ use druid::{
 };
 use std::net::{TcpStream};
 use std::io::{Read, Write};
-use std::str::from_utf8;
 
 use mpc::{
     party::Party,
@@ -21,16 +20,16 @@ pub struct VoteChoiceController {
     stream: TcpStream,
     id: usize,
     number_of_voters: usize,
-    vote_treshold: usize,
+    vote_threshold: usize,
 }
 
 impl VoteChoiceController {
-    pub fn new(stream: TcpStream, id: usize, number_of_voters: usize, vote_treshold: usize) -> Self {
+    pub fn new(stream: TcpStream, id: usize, number_of_voters: usize, vote_threshold: usize) -> Self {
         VoteChoiceController {
             stream,
             id,
             number_of_voters,
-            vote_treshold,
+            vote_threshold,
         }
     }
 }
@@ -119,8 +118,8 @@ unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
 
 impl ShareSender<Message<u8>> for ShareStream {
     fn send(&mut self, msg: Message<u8>) {
-        self.0.write(&(msg.to as u32).to_be_bytes()).unwrap();
-        let data = unsafe { any_as_u8_slice(&msg) };
-        self.0.write(data).unwrap_or_else(|_e| { println!("Error send"); 0 });
+        let data = [&(msg.to as u32).to_be_bytes()[..], unsafe { any_as_u8_slice(&msg) }].concat();
+        //println!("send: {:?}", &data);
+        self.0.write(&data).unwrap_or_else(|_e| { println!("Error send"); 0 });
     }
 }

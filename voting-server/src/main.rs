@@ -15,15 +15,17 @@ static GLOBAL_VOTERS_COUNT: AtomicUsize = AtomicUsize::new(0);
 #[derive(Clone)]
 struct VoteOptions {
     expected_voters: usize,
-    vote_treshold: usize,
+    vote_threshold: usize,
     options: String,
 }
 
 fn initialize_client(mut stream: TcpStream, VOTE_OPTIONS: VoteOptions) {
 
+    println!("initializing: {} {} {}", VOTE_OPTIONS.expected_voters, VOTE_OPTIONS.vote_threshold, VOTE_OPTIONS.options);
+
     stream.write(&(VOTE_OPTIONS.expected_voters as u32).to_be_bytes()).unwrap();
 
-    stream.write(&(VOTE_OPTIONS.vote_treshold as u32).to_be_bytes()).unwrap();
+    stream.write(&(VOTE_OPTIONS.vote_threshold as u32).to_be_bytes()).unwrap();
 
     stream.write(VOTE_OPTIONS.options.as_bytes()).unwrap();
 
@@ -49,31 +51,42 @@ fn initialize_client(mut stream: TcpStream, VOTE_OPTIONS: VoteOptions) {
     }
 }
 
-fn proxy_data(mut read_stram: TcpStream, id: usize, write_streams: HashMap<usize, TcpStream>) {
+fn process_packet(data: &[u8], id: usize, write_streams: &HashMap<usize, TcpStream>) -> usize {
+    let (id_bytes, data) = data.split_at(std::mem::size_of::<u32>());
+    let rcvr_id = u32::from_be_bytes(id_bytes.try_into().unwrap()) as usize;
+
+    println!("Msg from {} to {}", id, rcvr_id);
+
+    match write_streams.get(&rcvr_id) {
+        Some(mut stream) => {
+            //println!("proxy: {:?}", &data[0..32]);
+            stream.write(&data[0..32]).unwrap();
+        },
+        None => println!("Error"),
+    };
+
+    std::mem::size_of::<u32>() + 32
+}
+
+fn proxy_data(mut read_stream: TcpStream, id: usize, write_streams: HashMap<usize, TcpStream>) {
     let mut data = [0 as u8; 500];
 
     let start_protocol_info = b"Proxy Opened!";
-    read_stram.write(start_protocol_info).unwrap();
+    read_stream.write(start_protocol_info).unwrap();
 
-    while match read_stram.read(&mut data) {
-        Ok(_) => {
-            let (id_bytes, _rest) = data.split_at(std::mem::size_of::<u32>());
-            let rcvr_id = u32::from_be_bytes(id_bytes.try_into().unwrap()) as usize;
-
-            println!("Msg from {} to {}", id, rcvr_id);
-
-            match read_stram.read(&mut data) {
-                Ok(size) => {
-                    match write_streams.get(&rcvr_id) {
-                        Some(mut stream) => {
-                            stream.write(&data[0..size]).unwrap();
-                        },
-                        None => println!("Error"),
-                    };
-                },
-                Err(_) => println!("Error"),
+    while match read_stream.read(&mut data) {
+        Ok(size) => {
+            if size != 0 {
+                //println!("read {} bytes", size);
+                let mut i = 0;
+                while i < size {
+                    i += process_packet(&data[i..], id, &write_streams);
+                }
+                true
+            } else {
+                println!("Channel closed");
+                false
             }
-            true
         },
         Err(_) => {
             println!("Error");
@@ -89,30 +102,30 @@ fn main() {
             Ok(expected_voters) => expected_voters,
             _ => panic!("EXPECTED_VOTERS should be a non-negative integer!")
         },
-        None => panic!("Specify program arguments: <expected_voters> <vote_treshold> <vote_options>"),
+        None => panic!("Specify program arguments: <expected_voters> <vote_threshold> <vote_options>"),
     };
 
-    let VOTE_TRESHOLD: usize = match env::args().collect::<Vec<String>>().get(2) {
-        Some(vote_treshold) => match vote_treshold.parse::<usize>() {
-            Ok(vote_treshold) => vote_treshold,
-            _ => panic!("VOTE_TRESHOLD should be a non-negative integer!")
+    let VOTE_THRESHOLD: usize = match env::args().collect::<Vec<String>>().get(2) {
+        Some(vote_threshold) => match vote_threshold.parse::<usize>() {
+            Ok(vote_threshold) => vote_threshold,
+            _ => panic!("VOTE_THRESHOLD should be a non-negative integer!")
         },
-        None => panic!("Specify program arguments: <expected_voters> <vote_treshold> <vote_options>"),
+        None => panic!("Specify program arguments: <expected_voters> <vote_threshold> <vote_options>"),
     };
 
     let OPTIONS: String = match env::args().collect::<Vec<String>>().get(3) {
         Some(options) => options,
-        None => panic!("Specify program arguments: <expected_voters> <vote_treshold> <vote_options>"),
+        None => panic!("Specify program arguments: <expected_voters> <vote_threshold> <vote_options>"),
     }.to_string();
 
     let VOTE_OPTIONS = VoteOptions {
         expected_voters: EXPECTED_VOTERS,
-        vote_treshold: VOTE_TRESHOLD,
+        vote_threshold: VOTE_THRESHOLD,
         options: OPTIONS,
     };
 
     let listener = TcpListener::bind("0.0.0.0:3333").unwrap();
-    println!("Server starting with options: number of voters: {};  vote treshold: {}; voting options: {}.", VOTE_OPTIONS.expected_voters, VOTE_OPTIONS.vote_treshold, VOTE_OPTIONS.options);
+    println!("Server starting with options: number of voters: {};  vote threshold: {}; voting options: {}.", VOTE_OPTIONS.expected_voters, VOTE_OPTIONS.vote_threshold, VOTE_OPTIONS.options);
 
     let mut voters_streams: Vec<(TcpStream, usize)> = Vec::new();
 
@@ -151,6 +164,7 @@ fn main() {
                         },
                         Err(_) => panic!("Error reciving id"),
                     };
+                    println!("Connected {}", id);
                     voters_streams.push((stream.try_clone().unwrap(), id));
                     let cloned_vote_options = VOTE_OPTIONS.clone();
                     thread::spawn(move || initialize_client(stream, cloned_vote_options));

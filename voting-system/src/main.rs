@@ -35,23 +35,22 @@ fn main() {
             println!("Successfully connected to server in port 3333");
 
             // Send party id to server
-            let input = (id as u32).to_be_bytes();
-            stream.write(&input).unwrap();
+            let id_bytes = (id as u32).to_be_bytes();
+            stream.write(&id_bytes).unwrap();
 
-
-            // Receive votig options
+            // Receive voting options
             let mut data = [0 as u8; 500];
             let number_of_voters = match stream.read(&mut data) {
                 Ok(_) => {
-                    let (id_bytes, _rest) = data.split_at(std::mem::size_of::<u32>());
-                    u32::from_be_bytes(id_bytes.try_into().unwrap()) as usize
+                    let (n_voters_bytes, _rest) = data.split_at(std::mem::size_of::<u32>());
+                    u32::from_be_bytes(n_voters_bytes.try_into().unwrap()) as usize
                 },
                 Err(e) => panic!("Failed to receive data: {}", e)
             };
-            let vote_treshold = match stream.read(&mut data) {
+            let vote_threshold = match stream.read(&mut data) {
                 Ok(_) => {
-                    let (id_bytes, _rest) = data.split_at(std::mem::size_of::<u32>());
-                    u32::from_be_bytes(id_bytes.try_into().unwrap()) as usize
+                    let (threshold_bytes, _rest) = data.split_at(std::mem::size_of::<u32>());
+                    u32::from_be_bytes(threshold_bytes.try_into().unwrap()) as usize
                 },
                 Err(e) => panic!("Failed to receive data: {}", e)
             };
@@ -62,11 +61,11 @@ fn main() {
                 Err(e) => panic!("Failed to receive data: {}", e)
             };
 
-		    println!("Options received: number of voters: {};  vote treshold: {}; voting options: {}.", number_of_voters, vote_treshold, voting_options);
+		    println!("Options received: number of voters: {};  vote threshold: {}; voting options: {}.", number_of_voters, vote_threshold, voting_options);
 
             // Init UI
 		    let options_num = voting_options.split(",").collect::<Vec<&str>>().len();
-		    let main_window = WindowDesc::new(move || ui_builder(options_num, stream, id, number_of_voters, vote_treshold))
+		    let main_window = WindowDesc::new(move || ui_builder(options_num, stream, id, number_of_voters, vote_threshold))
 		        .title("Take a vote!")
 		        .window_size((300.0, 500.0));
 
