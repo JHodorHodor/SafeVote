@@ -1,0 +1,7 @@
+[workspace]
+
+members = [
+    "mpc",
+    "voting-server",
+    "voting-system",
+]

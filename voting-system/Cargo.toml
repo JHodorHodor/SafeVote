@@ -9,3 +9,5 @@ edition = "2018"
 env_logger = "0.9.0"
 rand = "0.8.4"
 druid = "0.7.0"
+
+mpc = { path = "../mpc" }

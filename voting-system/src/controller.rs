@@ -4,19 +4,32 @@ use druid::{
 };
 use std::net::{TcpStream};
 use std::io::{Read, Write};
-use std::str::from_utf8;
+
+use mpc::{
+    party::Party,
+    field::Field,
+    message::Message,
+    share_receiver::ShareReceiver,
+    share_sender::ShareSender,
+};
 
 use crate::command;
 use crate::Params;
 
 pub struct VoteChoiceController {
     stream: TcpStream,
+    id: usize,
+    number_of_voters: usize,
+    vote_threshold: usize,
 }
 
 impl VoteChoiceController {
-    pub fn new(stream: TcpStream) -> Self {
+    pub fn new(stream: TcpStream, id: usize, number_of_voters: usize, vote_threshold: usize) -> Self {
         VoteChoiceController {
-            stream
+            stream,
+            id,
+            number_of_voters,
+            vote_threshold,
         }
     }
 }
@@ -40,6 +53,8 @@ where
     }
 }
 
+use crate::util::generate_circuit;
+
 impl VoteChoiceController {
     fn command(
         &mut self,
@@ -61,32 +76,50 @@ impl VoteChoiceController {
         let input = b"VOTED";
         self.stream.write(input).unwrap();
 
-
         let mut data = [0 as u8; 500];
 
         match self.stream.read(&mut data) {
-            Ok(size) => {
-                println!("{}", from_utf8(&data[0..size]).unwrap());
-            },
-            Err(_) => {
-                println!("Error");
-            },
-        }
+            Ok(_) => println!("Protocol started!"),
+            Err(_) => println!("Error"),
+        };
 
-        let input = b"test_msg_to_all";
-        self.stream.write(input).unwrap();
+        let rx = ShareStream(self.stream.try_clone().unwrap(), self.number_of_voters);
+        let tx0 = ShareStream(self.stream.try_clone().unwrap(), self.number_of_voters);
+        let tx1 = ShareStream(self.stream.try_clone().unwrap(), self.number_of_voters);
+        let tx2 = ShareStream(self.stream.try_clone().unwrap(), self.number_of_voters);
 
-        while match self.stream.read(&mut data) {
-            Ok(size) => {
-                println!("received: {}", from_utf8(&data[0..size]).unwrap());
-                true
-            },
-            Err(_) => {
-                println!("Error");
-                false
-            },
-        } {}
+        Party::new(self.id, _input, Box::new(rx), vec![Box::new(tx0), Box::new(tx1), Box::new(tx2)],
+            Field::new(13),
+            generate_circuit(),
+            2).run()
+    }
+}
 
-        0
+struct ShareStream(TcpStream, usize);
+
+// TODO: use e.g. serde for (de)serialization of Message<>
+
+
+impl ShareReceiver<Message<u8>> for ShareStream {
+    fn recv(&mut self) -> Message<u8> {
+        let mut data = [0u8; std::mem::size_of::<Message<u8>>()];
+
+        self.0.read(&mut data).unwrap_or_else(|_e| { println!("Error recv"); 0 });
+        unsafe { std::mem::transmute(data) }
+    }
+}
+
+unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
+    ::std::slice::from_raw_parts(
+        (p as *const T) as *const u8,
+        ::std::mem::size_of::<T>(),
+    )
+}
+
+impl ShareSender<Message<u8>> for ShareStream {
+    fn send(&mut self, msg: Message<u8>) {
+        let data = [&(msg.to as u32).to_be_bytes()[..], unsafe { any_as_u8_slice(&msg) }].concat();
+        //println!("send: {:?}", &data);
+        self.0.write(&data).unwrap_or_else(|_e| { println!("Error send"); 0 });
     }
 }
