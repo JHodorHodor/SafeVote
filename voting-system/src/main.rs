@@ -105,12 +105,19 @@ fn ui_builder(stream: TcpStream, vote_options: vote_options::VoteOptions) -> imp
                         label
                     }
                 ).on_click(
-                    move |_ctx: &mut EventCtx, data: &mut Params, _env| data.options_toggle.0[i] = false
+                    move |_ctx: &mut EventCtx, data: &mut Params, _env| {
+                        if !data.is_confirmed {
+                            data.options_toggle.0[i] = false;
+                        }
+                    }
                 ).border(Color::rgb(0.0, 0.0, 0.3), 2.0).padding(10.0).expand_width(),
                 Button::new(
                     move |data: &Params, _env: &Env| data.options.split(",").collect::<Vec<&str>>()[i].to_string()
                 ).on_click(
-                    move |_ctx: &mut EventCtx, data: &mut Params, _env| data.options_toggle.0[i] = true
+                    move |_ctx: &mut EventCtx, data: &mut Params, _env| 
+                        if !data.is_confirmed {
+                            data.options_toggle.0[i] = true;
+                        }
                 ).border(Color::rgb(0.0, 0.0, 0.3), 2.0).padding(10.0).expand_width(),
             )
     	)
@@ -163,8 +170,10 @@ fn ui_builder(stream: TcpStream, vote_options: vote_options::VoteOptions) -> imp
         .with_child(buttons_group)
         .with_child(Button::new("Confirm votes").on_click(
             move |ctx: &mut EventCtx, data: &mut Params, _env: &Env| {
-                data.is_confirmed = true;
-                ctx.submit_command(command::VOTE.with(data.options_toggle.0.clone()))
+                if !data.is_confirmed {
+                    data.is_confirmed = true;
+                    ctx.submit_command(command::VOTE.with(data.options_toggle.0.clone()))
+                }
             }
         ));
 
