@@ -132,9 +132,11 @@ impl VoteChoiceController {
 
 struct ShareStream(TcpStream, usize);
 
-impl ShareReceiver<Message<u16>> for ShareStream {
-    fn recv(&mut self) -> Message<u16> {
-        let mut data = [0u8; std::mem::size_of::<Message<u16>>()];
+type Msg = Message<u16>;
+
+impl ShareReceiver<Msg> for ShareStream {
+    fn recv(&mut self) -> Msg {
+        let mut data = [0u8; std::mem::size_of::<Msg>()];
 
         self.0.read_exact(&mut data).unwrap_or_else(|_e| println!("Error recv"));
         unsafe { std::mem::transmute(data) }
@@ -148,9 +150,13 @@ unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
     )
 }
 
-impl ShareSender<Message<u16>> for ShareStream {
-    fn send(&mut self, msg: Message<u16>) {
-        let data = [&(self.1 as u32).to_be_bytes()[..], unsafe { any_as_u8_slice(&msg) }].concat();
+impl ShareSender<Msg> for ShareStream {
+    fn send(&mut self, msg: Msg) {
+        let data = [
+            &(self.1 as u64).to_be_bytes()[..],
+            &(std::mem::size_of::<Msg>() as u64).to_be_bytes(),
+            unsafe { any_as_u8_slice(&msg) }
+        ].concat();
         self.0.write(&data).unwrap_or_else(|_e| { println!("Error send"); 0 });
     }
 }

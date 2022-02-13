@@ -48,31 +48,40 @@ fn initialize_client(mut stream: TcpStream, VOTE_OPTIONS: VoteOptions) {
     }
 }
 
-fn process_packet(data: &[u8], _id: usize, write_streams: &HashMap<usize, TcpStream>) -> bool {
-    let (id_bytes, data) = data.split_at(std::mem::size_of::<u32>());
-    let rcvr_id = u32::from_be_bytes(id_bytes.try_into().unwrap()) as usize;
+fn read_message(info: &[u8], read_stream: &mut TcpStream) -> (usize, Vec<u8>) {
+    let (id_bytes, size_bytes) = info.split_at(std::mem::size_of::<u64>());
+    let id = u64::from_be_bytes(id_bytes.try_into().unwrap()) as usize;
+    let size = u64::from_be_bytes(size_bytes.try_into().unwrap()) as usize;
 
-    match write_streams.get(&rcvr_id) {
+    let mut data = vec![0u8; size];
+    read_stream.read_exact(&mut data).unwrap_or_else(|_e| println!("Error read_message"));
+
+    (id, data)
+}
+
+fn process_message(msg: Vec<u8>, id: usize, write_streams: &HashMap<usize, TcpStream>) -> bool {
+    match write_streams.get(&id) {
         Some(mut stream) => {
-            stream.write(&data[0..32]).unwrap();
+            stream.write(&msg).unwrap();
             true
         },
         None => {
-            println!("Error");
+            println!("Error process_packet");
             false
         }
     }
 }
 
-fn proxy_data(mut read_stream: TcpStream, id: usize, write_streams: HashMap<usize, TcpStream>) {
+fn proxy_data(mut read_stream: TcpStream, write_streams: HashMap<usize, TcpStream>) {
     let start_protocol_info = b"Proxy Opened!";
     read_stream.write(start_protocol_info).unwrap();
 
-    let mut data = [0 as u8; std::mem::size_of::<u32>() + 32];
+    let mut data = [0 as u8; std::mem::size_of::<u64>() * 2];
 
     while match read_stream.read_exact(&mut data) {
         Ok(_) => {
-            process_packet(&data[..], id, &write_streams)
+            let (id, msg) = read_message(&data[..], &mut read_stream);
+            process_message(msg, id, &write_streams)
         },
         Err(_) => {
             println!("Channel closed");
@@ -135,8 +144,8 @@ fn main() {
                             }
                         );
                         let next_stream_clone = next_stream.try_clone().unwrap();
-                        let next_id_clone = next_id.clone();
-                        thread::spawn(move || proxy_data(next_stream_clone, next_id_clone, other_streams_map));
+                        //let next_id_clone = next_id.clone();
+                        thread::spawn(move || proxy_data(next_stream_clone, other_streams_map));
                     }
                 } else {
                     // Receive party id
