@@ -99,7 +99,7 @@ where DataType: field::FieldElement +
         }
 
         let results = circuit.get_roots().into_iter().map(
-            |gate_id| self.process_output(n_gates + gate_id, circuit.get_gate(gate_id).get_output())
+            |gate_id| self.process_output(n_gates, circuit.get_gate(gate_id).get_output())
         ).collect();
 
         info!("Party {} finished with output {:?}", self.id, results);
