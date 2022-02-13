@@ -23,7 +23,7 @@ pub(crate) fn vote(input: Vec<bool>, vote_options: vote_options::VoteOptions, mu
 
     match stream.read(&mut data) {
         Ok(_) => println!("Protocol started!"),
-        Err(_) => println!("Error"),
+        Err(_) => println!("Error when starting protocol"),
     };
 
     let rx = Box::new(ShareStream(stream.try_clone().unwrap(), vote_options.get_id()));
@@ -38,7 +38,7 @@ pub(crate) fn vote(input: Vec<bool>, vote_options: vote_options::VoteOptions, mu
         txs,
         Field::new(GROUP_ORDER),
         generate_circuit(vote_options.get_number_of_voters(), vote_options.get_vote_threshold(), vote_options.get_number_of_options(), GROUP_ORDER),
-        vote_options.get_number_of_voters() / 2
+        (vote_options.get_number_of_voters() - 1) / 2
     ).setup().run()
 }
 
@@ -50,7 +50,7 @@ impl ShareReceiver<Msg> for ShareStream {
     fn recv(&mut self) -> Msg {
         let mut data = [0u8; std::mem::size_of::<Msg>()];
 
-        self.0.read_exact(&mut data).unwrap_or_else(|_e| println!("Error recv"));
+        self.0.read_exact(&mut data).unwrap_or_else(|e| println!("Error recv: {}", e));
         unsafe { std::mem::transmute(data) }
     }
 }
@@ -69,6 +69,6 @@ impl ShareSender<Msg> for ShareStream {
             &(std::mem::size_of::<Msg>() as u64).to_be_bytes(),
             unsafe { any_as_u8_slice(&msg) }
         ].concat();
-        self.0.write(&data).unwrap_or_else(|_e| { println!("Error send"); 0 });
+        self.0.write(&data).unwrap_or_else(|e| { println!("Error send: {}", e); 0 });
     }
 }

@@ -39,7 +39,7 @@ pub(crate) fn generate_circuit(number_of_voters: usize, vote_threshold: usize, n
             mul_last_gates.into_iter().reduce(|acc, item| circuit.add(Gate::new_add(acc, item))).unwrap()
     }).collect();
     
-    println!("len of c: {}", circuit.size());
+    println!("Circuit size: {}", circuit.size());
     circuit.set_roots(roots);
     circuit
 }

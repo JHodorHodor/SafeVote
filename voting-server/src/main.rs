@@ -44,7 +44,7 @@ fn initialize_client(mut stream: TcpStream, VOTE_OPTIONS: VoteOptions) {
                 }
             }
         },
-        Err(_) => println!("Error"),
+        Err(e) => println!("Error when initializing client: {}", e),
     }
 }
 
@@ -54,7 +54,7 @@ fn read_message(info: &[u8], read_stream: &mut TcpStream) -> (usize, Vec<u8>) {
     let size = u64::from_be_bytes(size_bytes.try_into().unwrap()) as usize;
 
     let mut data = vec![0u8; size];
-    read_stream.read_exact(&mut data).unwrap_or_else(|_e| println!("Error read_message"));
+    read_stream.read_exact(&mut data).unwrap_or_else(|e| println!("Error read_message: {}", e));
 
     (id, data)
 }

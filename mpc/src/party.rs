@@ -43,6 +43,8 @@ where DataType: field::FieldElement +
     
     pub fn setup(mut self) -> Self {
         info!("Setupping party {}", self.id);
+
+        let n_gates = self.circuit.size();
         
         for gate_id in self.circuit.traverse() {
             if matches!(self.circuit.get_gate(gate_id), gate::Gate::Mul { first: _, second: _, output: _ }) {
@@ -53,8 +55,12 @@ where DataType: field::FieldElement +
                 let s_poly = polynomial::Polynomial::random(r.clone(), self.threshold, self.field.clone());
                 let t_poly = polynomial::Polynomial::random(r, self.threshold * 2, self.field.clone());
 
-                let s_shares = self.broadcast_poly(s_poly, gate_id);
-                let t_shares = self.broadcast_poly(t_poly, gate_id);
+                // NOTE: messages are identified in the cache (self.past_messages) by
+                // gate_id (essentially "round_id");
+                // in order to avoid messing up the cache, s_share and t_share are sent with
+                // (gate_id + n_gates) and (gate_id + 2 * n_gates) respectively - unique "round_id's"
+                let s_shares = self.broadcast_poly(s_poly, gate_id + n_gates);
+                let t_shares = self.broadcast_poly(t_poly, gate_id + 2 * n_gates);
                 
                 self.r_share.insert(gate_id, (
                     s_shares.into_iter().fold(DataType::from(0), |a, b| self.field.add(a, b)),
@@ -119,9 +125,7 @@ where DataType: field::FieldElement +
                         }
                     }            
         };
-        let s = self.past_messages.remove(&msg);
-
-        debug!("is_removed: {}", s);
+        self.past_messages.remove(&msg);
         
         msg
     }
