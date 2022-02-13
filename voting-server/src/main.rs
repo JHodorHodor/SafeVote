@@ -51,30 +51,31 @@ fn initialize_client(mut stream: TcpStream, VOTE_OPTIONS: VoteOptions) {
     }
 }
 
-fn process_packet(data: &[u8], id: usize, write_streams: &HashMap<usize, TcpStream>) -> usize {
+fn process_packet(data: &[u8], _id: usize, write_streams: &HashMap<usize, TcpStream>) -> bool {
     let (id_bytes, data) = data.split_at(std::mem::size_of::<u32>());
     let rcvr_id = u32::from_be_bytes(id_bytes.try_into().unwrap()) as usize;
 
     match write_streams.get(&rcvr_id) {
         Some(mut stream) => {
             stream.write(&data[0..32]).unwrap();
+            true
         },
-        None => println!("Error"),
-    };
-
-    std::mem::size_of::<u32>() + 32
+        None => {
+            println!("Error");
+            false
+        }
+    }
 }
 
 fn proxy_data(mut read_stream: TcpStream, id: usize, write_streams: HashMap<usize, TcpStream>) {
-    let mut data = [0 as u8; 36];
-
     let start_protocol_info = b"Proxy Opened!";
     read_stream.write(start_protocol_info).unwrap();
 
+    let mut data = [0 as u8; std::mem::size_of::<u32>() + 32];
+
     while match read_stream.read_exact(&mut data) {
         Ok(_) => {
-            process_packet(&data[..], id, &write_streams);
-            true
+            process_packet(&data[..], id, &write_streams)
         },
         Err(_) => {
             println!("Channel closed");

@@ -52,7 +52,7 @@ fn main() {
             stream.write(&id_bytes).unwrap();
 
             // Receive voting options
-            let mut data = [0 as u8; 4];
+            let mut data = [0 as u8; std::mem::size_of::<u32>()];
             let number_of_voters = match stream.read_exact(&mut data) {
                 Ok(_) => {
                     u32::from_be_bytes(data.try_into().unwrap()) as usize
@@ -75,13 +75,9 @@ fn main() {
             };
 
             let number_of_options = voting_options.split(",").collect::<Vec<&str>>().len();
-
-            let vote_options = controller::VoteOptions {
-                id: id,
-                number_of_voters: number_of_voters,
-                vote_threshold: vote_threshold,
-                number_of_options: number_of_options,
-            };
+            let vote_options = controller::VoteOptions::new(
+                id, number_of_voters, vote_threshold, number_of_options
+            );
 
 		    println!("Options received: number of voters: {};  vote threshold: {}; voting options: {}.", number_of_voters, vote_threshold, voting_options);
 
@@ -109,7 +105,7 @@ fn main() {
 
 fn ui_builder(stream: TcpStream, vote_options: controller::VoteOptions) -> impl Widget<Params> {
     println!("UI");
-    let buttons_group = (0..vote_options.number_of_options).fold(
+    let buttons_group = (0..vote_options.get_number_of_options()).fold(
     	Flex::column(),
     	|column, i| column.with_child(
             Either::new(

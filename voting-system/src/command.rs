@@ -1,3 +1,3 @@
 use druid::Selector;
 
-pub const VOTE: Selector<Vec<bool>> = Selector::new("app.vote");
+pub(crate) const VOTE: Selector<Vec<bool>> = Selector::new("app.vote");

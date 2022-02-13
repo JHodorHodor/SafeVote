@@ -2,9 +2,9 @@ use std::hash::{Hash, Hasher};
 
 #[derive(Clone)]
 pub struct Message<DataType> {
-    pub from: usize,
-    pub to: usize,
-    pub gate: usize,
+    from: usize,
+    to: usize,
+    gate: usize,
     share: DataType
 }
 
@@ -16,7 +16,19 @@ impl<DataType: Clone> Message<DataType> {
         }
     }
 
-    pub fn get_share(&self) -> DataType {
+    pub(crate) fn get_from(&self) -> usize {
+        self.from
+    }
+
+    pub(crate) fn get_to(&self) -> usize {
+        self.to
+    }
+
+    pub(crate) fn get_gate(&self) -> usize {
+        self.gate
+    }
+
+    pub(crate) fn get_share(&self) -> DataType {
         self.share.clone()
     }
 }

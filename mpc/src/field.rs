@@ -41,11 +41,11 @@ impl<DataType: FieldElement> Field<DataType> {
         Field { order, rand: rand::thread_rng() }
     }
 
-    pub fn zero(&self) -> DataType {
+    pub(crate) fn zero(&self) -> DataType {
         DataType::zero()
     }
 
-    pub fn one(&self) -> DataType {
+    pub(crate) fn one(&self) -> DataType {
         DataType::one()
     }
 
