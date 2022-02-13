@@ -9,6 +9,7 @@ use crate::polynomial;
 use log::{info, debug};
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 pub struct Party<DataType: Clone> {
     id: usize,
@@ -19,11 +20,12 @@ pub struct Party<DataType: Clone> {
     field: field::Field<DataType>,
     circuit: circuit::Circuit<DataType>,
     threshold: usize,
+    past_messages: HashSet<message::Message<DataType>>,
 }
 
 impl<DataType> Party<DataType>
 where DataType: field::FieldElement +
-                From<u8> +
+                From<u16> +
                 std::fmt::Debug +
                 std::fmt::Display {
 
@@ -36,7 +38,8 @@ where DataType: field::FieldElement +
         let n_parties = circuit.get_n_parties() as usize;
         Party {
             id, secret, rx, txs, field, circuit, threshold,
-            shares: vec![HashMap::new(); n_parties]
+            shares: vec![HashMap::new(); n_parties],
+            past_messages: HashSet::new(),
         }
     }
 
@@ -71,9 +74,27 @@ where DataType: field::FieldElement +
         let output = circuit.get_root().get_output();
         let result = self.process_output(n_gates, output);
 
+        println!("Party {} finished with output {}", self.id, result);
         info!("Party {} finished with output {}", self.id, result);
 
         result
+    }
+
+    fn safe_recv(&mut self, gate_id: usize) -> message::Message<DataType> {
+        let msg = match self.past_messages.iter().find(|&m| m.to == self.id && m.gate == gate_id) {
+            Some(msg) => msg.clone(),
+            None => loop {
+                    let msg = self.rx.recv();
+                    if msg.to == self.id && msg.gate == gate_id {
+                        break msg;
+                    } else {
+                        self.past_messages.insert(msg.clone());
+                    }
+                }            
+        };
+        let s = self.past_messages.remove(&msg);
+        println!("is_removed: {}", s);
+        return msg;
     }
 
     fn process_input(&mut self, gate_id: usize, party: usize) -> DataType {
@@ -92,12 +113,8 @@ where DataType: field::FieldElement +
                     }
                 });
         } else {
-            while !self.shares[party].contains_key(&gate_id) {
-                let msg = self.rx.recv();
-                if msg.to == self.id && msg.gate == gate_id {
-                    self.shares[party].insert(gate_id, msg.get_share());
-                }
-            }
+            let msg = self.safe_recv(gate_id);
+            self.shares[party].insert(gate_id, msg.get_share());
         }
 
         debug!("Party{}: shares[{}][{}] = {}", self.id, party, gate_id, self.shares[party][&gate_id]);
@@ -111,6 +128,7 @@ where DataType: field::FieldElement +
     }
 
     fn process_mul_by_const(&mut self, _gate_id: usize, first: &gate::Gate<DataType>, second: DataType) -> DataType {
+        debug!("Party{}: process_mul_by_const({}, {})", self.id, first.get_output(), second);
         self.field.mul(first.get_output(), second)
     }
 
@@ -137,13 +155,8 @@ where DataType: field::FieldElement +
 
         (1..n_parties)
                 .for_each(|_| {
-                    loop {
-                        let msg = self.rx.recv();
-                        if msg.to == self.id && msg.gate == gate_id {
-                            self.shares[msg.from].insert(gate_id, msg.get_share());
-                            return;
-                        }
-                    }
+                    let msg = self.safe_recv(gate_id);
+                    self.shares[msg.from].insert(gate_id, msg.get_share());
                 });
 
         let result = (0..n_parties)
@@ -177,13 +190,8 @@ where DataType: field::FieldElement +
 
         (1..n_parties)
                 .for_each(|_| {
-                    loop {
-                        let msg = self.rx.recv();
-                        if msg.to == self.id && msg.gate == n_gates {
-                            self.shares[msg.from].insert(n_gates, msg.get_share());
-                            return;
-                        }
-                    }
+                    let msg = self.safe_recv(n_gates);
+                    self.shares[msg.from].insert(n_gates, msg.get_share());
                 });
 
         debug!("Party{}: interpolating {:?}", self.id, (0..n_parties).map(|p| self.shares[p as usize][&n_gates].clone()).collect::<Vec<_>>());

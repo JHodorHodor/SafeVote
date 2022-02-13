@@ -4,14 +4,14 @@ use std::iter::Iterator;
 
 #[derive(Clone)]
 pub struct Circuit<DataType: Clone> {
-    gates: Vec<gate::Gate<DataType>>,
+    pub gates: Vec<gate::Gate<DataType>>,
     root: usize,
-    n_parties: u8,
+    n_parties: u16,
 }
 
 impl<DataType: Clone> Circuit<DataType> {
     
-    pub fn new(n_parties: u8) -> Self {
+    pub fn new(n_parties: u16) -> Self {
         Circuit {
             gates: vec![],
             root: 0, 
@@ -28,7 +28,7 @@ impl<DataType: Clone> Circuit<DataType> {
         self.gates.len() - 1
     }
 
-    pub fn get_n_parties(&self) -> u8 {
+    pub fn get_n_parties(&self) -> u16 {
         self.n_parties
     }
 

@@ -12,7 +12,6 @@ mod command;
 mod controller;
 mod util;
 
-
 #[derive(Clone, Data, Lens)]
 struct Params {
     is_picked: bool,
@@ -39,21 +38,21 @@ fn main() {
             stream.write(&id_bytes).unwrap();
 
             // Receive voting options
+            let mut data = [0 as u8; 4];
+            let number_of_voters = match stream.read_exact(&mut data) {
+                Ok(_) => {
+                    u32::from_be_bytes(data.try_into().unwrap()) as usize
+                },
+                Err(e) => panic!("Failed to receive data: {}", e)
+            };
+            let vote_threshold = match stream.read_exact(&mut data) {
+                Ok(_) => {
+                    u32::from_be_bytes(data.try_into().unwrap()) as usize
+                },
+                Err(e) => panic!("Failed to receive data: {}", e)
+            };
+
             let mut data = [0 as u8; 500];
-            let number_of_voters = match stream.read(&mut data) {
-                Ok(_) => {
-                    let (n_voters_bytes, _rest) = data.split_at(std::mem::size_of::<u32>());
-                    u32::from_be_bytes(n_voters_bytes.try_into().unwrap()) as usize
-                },
-                Err(e) => panic!("Failed to receive data: {}", e)
-            };
-            let vote_threshold = match stream.read(&mut data) {
-                Ok(_) => {
-                    let (threshold_bytes, _rest) = data.split_at(std::mem::size_of::<u32>());
-                    u32::from_be_bytes(threshold_bytes.try_into().unwrap()) as usize
-                },
-                Err(e) => panic!("Failed to receive data: {}", e)
-            };
             let voting_options = match stream.read(&mut data) {
                 Ok(size) => {
                 	from_utf8(&data[0..size]).unwrap().to_string()
@@ -61,11 +60,17 @@ fn main() {
                 Err(e) => panic!("Failed to receive data: {}", e)
             };
 
+            let vote_options = controller::VoteOptions {
+                id: id,
+                number_of_voters: number_of_voters,
+                vote_threshold: vote_threshold,
+                number_of_options: voting_options.split(",").collect::<Vec<&str>>().len(),
+            };
+
 		    println!("Options received: number of voters: {};  vote threshold: {}; voting options: {}.", number_of_voters, vote_threshold, voting_options);
 
             // Init UI
-		    let options_num = voting_options.split(",").collect::<Vec<&str>>().len();
-		    let main_window = WindowDesc::new(move || ui_builder(options_num, stream, id, number_of_voters, vote_threshold))
+		    let main_window = WindowDesc::new(move || ui_builder(stream, vote_options))
 		        .title("Take a vote!")
 		        .window_size((300.0, 500.0));
 
@@ -85,9 +90,9 @@ fn main() {
     }
 }
 
-fn ui_builder(options_num: usize, stream: TcpStream, id: usize, number_of_voters: usize, vote_treshold: usize) -> impl Widget<Params> {
-
-    let buttons_group = (0..options_num).fold(
+fn ui_builder(stream: TcpStream, vote_options: controller::VoteOptions) -> impl Widget<Params> {
+    println!("UI");
+    let buttons_group = (0..vote_options.number_of_options).fold(
     	Flex::column(),
     	|column, i| column.with_child(
     		Button::new(
@@ -97,7 +102,7 @@ fn ui_builder(options_num: usize, stream: TcpStream, id: usize, number_of_voters
     				if !data.is_picked {
 	    				data.is_picked = true;
 	    				println!("Voted for {}", i);
-						ctx.submit_command(command::VOTE.with(i as u8));
+						ctx.submit_command(command::VOTE.with(i as u16));
     				}
     			}
     		)
@@ -117,5 +122,5 @@ fn ui_builder(options_num: usize, stream: TcpStream, id: usize, number_of_voters
             Flex::column(),
             buttons_group,
         ))
-		.controller(controller::VoteChoiceController::new(stream, id, number_of_voters, vote_treshold))
+		.controller(controller::VoteChoiceController::new(stream, vote_options))
 }

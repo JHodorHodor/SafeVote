@@ -55,11 +55,8 @@ fn process_packet(data: &[u8], id: usize, write_streams: &HashMap<usize, TcpStre
     let (id_bytes, data) = data.split_at(std::mem::size_of::<u32>());
     let rcvr_id = u32::from_be_bytes(id_bytes.try_into().unwrap()) as usize;
 
-    println!("Msg from {} to {}", id, rcvr_id);
-
     match write_streams.get(&rcvr_id) {
         Some(mut stream) => {
-            //println!("proxy: {:?}", &data[0..32]);
             stream.write(&data[0..32]).unwrap();
         },
         None => println!("Error"),
@@ -69,27 +66,18 @@ fn process_packet(data: &[u8], id: usize, write_streams: &HashMap<usize, TcpStre
 }
 
 fn proxy_data(mut read_stream: TcpStream, id: usize, write_streams: HashMap<usize, TcpStream>) {
-    let mut data = [0 as u8; 500];
+    let mut data = [0 as u8; 36];
 
     let start_protocol_info = b"Proxy Opened!";
     read_stream.write(start_protocol_info).unwrap();
 
-    while match read_stream.read(&mut data) {
-        Ok(size) => {
-            if size != 0 {
-                //println!("read {} bytes", size);
-                let mut i = 0;
-                while i < size {
-                    i += process_packet(&data[i..], id, &write_streams);
-                }
-                true
-            } else {
-                println!("Channel closed");
-                false
-            }
+    while match read_stream.read_exact(&mut data) {
+        Ok(_) => {
+            process_packet(&data[..], id, &write_streams);
+            true
         },
         Err(_) => {
-            println!("Error");
+            println!("Channel closed");
             false
         },
     } {}

@@ -39,6 +39,38 @@ mod tests {
         println!("{:?}", circuit.traverse().collect::<Vec<_>>());
     }
 
+    /*
+    #[test]
+    fn test_circuit_traversal_generic() {
+        let number_of_voters = 5;
+        let vote_threshold = 2;
+        let minus_one = 250;
+
+        let mut circuit = Circuit::new(number_of_voters);
+
+        let inputs: Vec<usize> = (0..number_of_voters).map(|i| circuit.add(Gate::<u8>::new_input(i))).collect();
+
+        let last_and_gates = (0..number_of_options).combinations(vote_threshold).map(|subset| subset.iter().reduce(|acc, item| circuit.add(Gate::new_mul(acc, item))));
+
+        let root = (1..last_and_gates.len() + 1).map(
+                |l| last_and_gates.clone().combinations(l).map(
+                    |subset| {
+                        let mul_subset = subset.iter().reduce(|acc, item| circuit.add(Gate::new_mul(acc, item)));
+                        if l + 1 % 2 == 0 {
+                            circuit.add(Gate::new_mul_by_const(mul_subset, minus_one))
+                        } else {
+                            mul_subset
+                        }
+                    }
+                )
+            ).flatten()
+            .reduce(|acc, item| circuit.add(Gate::new_add(acc, item)));
+        circuit.set_root(root);
+
+        println!("{:?}", circuit.traverse().collect::<Vec<_>>());
+    }
+    */
+
     #[test]
     fn test_party_new() {
         env_logger::init();
