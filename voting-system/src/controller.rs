@@ -83,14 +83,15 @@ impl VoteChoiceController {
         //tracing::debug!("Voting tab received command: {:?}", command);
 
         if command.is(command::VOTE) {
-            self.vote(*command.get_unchecked(command::VOTE));
+            println!("input {:?}", command.get_unchecked(command::VOTE));
+            self.vote(command.get_unchecked(command::VOTE).clone());
             Handled::Yes
         } else {
             Handled::No
         }
     }
 
-    fn vote(&mut self, input: u16) -> u16 {
+    fn vote(&mut self, input: Vec<bool>) -> Vec<u16> {
         self.stream.write(b"VOTED").unwrap();
 
         let mut data = [0 as u8; 500];
@@ -107,7 +108,7 @@ impl VoteChoiceController {
 
         Party::new(
             self.vote_options.id,
-            input,
+            input.into_iter().map(u16::from).collect(),
             rx,
             txs,
             Field::new(GROUP_ORDER),

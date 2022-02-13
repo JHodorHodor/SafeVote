@@ -8,7 +8,7 @@ use std::collections::{HashSet, HashMap};
 
 pub struct Party<DataType: Clone> {
     id: usize,
-    secret: DataType,
+    secret: Vec<DataType>,
     rx: Box<dyn share_receiver::ShareReceiver<message::Message<DataType>>>,
     txs: Vec<Box<dyn share_sender::ShareSender<message::Message<DataType>>>>,
     shares: Vec<HashMap<usize, DataType>>,
@@ -24,7 +24,8 @@ where DataType: field::FieldElement +
                 std::fmt::Debug +
                 std::fmt::Display {
 
-    pub fn new(id: usize, secret: DataType,
+    pub fn new(id: usize,
+                secret: Vec<DataType>,
                 rx: Box<dyn share_receiver::ShareReceiver<message::Message<DataType>>>, 
                 txs: Vec<Box<dyn share_sender::ShareSender<message::Message<DataType>>>>,
                 field: field::Field<DataType>,
@@ -38,8 +39,8 @@ where DataType: field::FieldElement +
         }
     }
 
-    pub fn run(mut self) -> DataType {
-        info!("Running party {} with secret {}", self.id, self.secret);
+    pub fn run(mut self) -> Vec<DataType> {
+        info!("Running party {} with secret {:?}", self.id, self.secret);
 
         let mut n_gates = 0;
         let mut circuit = self.circuit.clone();
@@ -47,8 +48,8 @@ where DataType: field::FieldElement +
             debug!("Party{}: processing gate {}", self.id, gate_id);
 
             let output = match circuit.get_gate(gate_id) {
-                gate::Gate::Input { ref party, output: _ } => {
-                    self.process_input(gate_id, *party)
+                gate::Gate::Input { ref party, ref circuit_id, output: _ } => {
+                    self.process_input(gate_id, *party, *circuit_id)
                 }
                 gate::Gate::Add { ref first, ref second, output: _ } => {
                     self.process_add(gate_id, circuit.get_gate(*first), circuit.get_gate(*second))
@@ -66,12 +67,11 @@ where DataType: field::FieldElement +
             n_gates += 1;
         }
 
-        let output = circuit.get_root().get_output();
-        let result = self.process_output(n_gates, output);
+        let results = circuit.get_roots().iter().map(|gate_id| self.process_output(n_gates, circuit.get_gate(*gate_id).get_output())).collect();
 
-        info!("Party {} finished with output {}", self.id, result);
+        info!("Party {} finished with output {:?}", self.id, results);
 
-        result
+        results
     }
 
     fn safe_recv(&mut self, gate_id: usize) -> message::Message<DataType> {
@@ -93,11 +93,11 @@ where DataType: field::FieldElement +
         msg
     }
 
-    fn process_input(&mut self, gate_id: usize, party: usize) -> DataType {
+    fn process_input(&mut self, gate_id: usize, party: usize, circuit_id: usize) -> DataType {
         debug!("Party{}: process_input({}, {})", self.id, gate_id, party);
 
         if self.id == party {
-            let poly = polynomial::Polynomial::random(self.secret.clone(), self.threshold, self.field.clone());
+            let poly = polynomial::Polynomial::random(self.secret[circuit_id].clone(), self.threshold, self.field.clone());
             (0..self.circuit.get_n_parties())
                 .map(|i| (i, poly.eval(DataType::from(i + 1))))
                 .for_each(|(party, share)| {

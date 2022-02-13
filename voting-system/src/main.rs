@@ -12,10 +12,24 @@ mod command;
 mod controller;
 mod util;
 
+#[derive(Clone)]
+struct OptionsToggle(Vec<bool>);
+
+impl Data for OptionsToggle {
+    fn same(&self, other: &Self) -> bool {
+        if self.0.len() != other.0.len() {
+            return false;
+        }
+        self.0.iter().zip(other.0.iter()).all(|opt| opt.0 == opt.1)
+    }
+}
+
+
 #[derive(Clone, Data, Lens)]
 struct Params {
-    is_picked: bool,
+    is_confirmed: bool,
     options: String,
+    options_toggle: OptionsToggle,
 }
 
 fn main() {
@@ -60,9 +74,9 @@ fn main() {
                 Err(e) => panic!("Failed to receive data: {}", e)
             };
 
+            let number_of_options = voting_options.split(",").collect::<Vec<&str>>().len();
             let vote_options = controller::VoteOptions::new(
-                id, number_of_voters, vote_threshold,
-                voting_options.split(",").collect::<Vec<&str>>().len()
+                id, number_of_voters, vote_threshold, number_of_options
             );
 
 		    println!("Options received: number of voters: {};  vote threshold: {}; voting options: {}.", number_of_voters, vote_threshold, voting_options);
@@ -74,8 +88,9 @@ fn main() {
 
 		    println!("{}", voting_options);
 		    let params = Params {
-		        is_picked: false,
+		        is_confirmed: false,
 		        options: voting_options,
+                options_toggle: OptionsToggle(vec![false; number_of_options]),
 		    };
 
 		    AppLauncher::with_window(main_window)
@@ -93,32 +108,40 @@ fn ui_builder(stream: TcpStream, vote_options: controller::VoteOptions) -> impl 
     let buttons_group = (0..vote_options.get_number_of_options()).fold(
     	Flex::column(),
     	|column, i| column.with_child(
-    		Button::new(
-    			move |data: &Params, _env: &Env| data.options.split(",").collect::<Vec<&str>>()[i].to_string()
-    		).on_click(
-    			move |ctx: &mut EventCtx, data: &mut Params, _env| {
-    				if !data.is_picked {
-	    				data.is_picked = true;
-	    				println!("Voted for {}", i);
-						ctx.submit_command(command::VOTE.with(i as u16));
-    				}
-    			}
-    		)
+            Either::new(
+                move |data: &Params, _env: &Env| data.options_toggle.0[i],
+                Button::new(
+                    move |data: &Params, _env: &Env| {
+                        let mut label = "-> ".to_owned();
+                        label.push_str(data.options.split(",").collect::<Vec<&str>>()[i]);
+                        label
+                    }
+                ).on_click(
+                    move |_ctx: &mut EventCtx, data: &mut Params, _env| data.options_toggle.0[i] = false
+                ),
+                Button::new(
+                    move |data: &Params, _env: &Env| data.options.split(",").collect::<Vec<&str>>()[i].to_string()
+                ).on_click(
+                    move |_ctx: &mut EventCtx, data: &mut Params, _env| data.options_toggle.0[i] = true
+                ),
+            )
     	)
     );
 
     Flex::column()
         .with_child(Label::new(|data: &Params, _env: &Env| {
-        	if data.is_picked {
+        	if data.is_confirmed {
         		"Voted, wait to compute the result!".to_string()
         	} else {
         		"Options:".to_string()
         	}
         }))
-        .with_child(Either::new(
-            |data: &Params, _env: &Env| data.is_picked,
-            Flex::column(),
-            buttons_group,
+        .with_child(buttons_group)
+        .with_child(Button::new("Confirm votes").on_click(
+            move |ctx: &mut EventCtx, data: &mut Params, _env: &Env| {
+                let x = ctx.submit_command(command::VOTE.with(data.options_toggle.0.clone()));
+                println!("result: {:?}", x);
+            }
         ))
 		.controller(controller::VoteChoiceController::new(stream, vote_options))
 }
