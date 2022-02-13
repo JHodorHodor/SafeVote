@@ -12,6 +12,7 @@ pub struct Party<DataType: Clone> {
     rx: Box<dyn share_receiver::ShareReceiver<message::Message<DataType>>>,
     txs: Vec<Box<dyn share_sender::ShareSender<message::Message<DataType>>>>,
     shares: Vec<HashMap<usize, DataType>>,
+    r_share: HashMap<usize, (DataType, DataType)>,
     field: field::Field<DataType>,
     circuit: circuit::Circuit<DataType>,
     threshold: usize,
@@ -35,8 +36,38 @@ where DataType: field::FieldElement +
         Party {
             id, secret, rx, txs, field, circuit, threshold,
             shares: vec![HashMap::new(); n_parties],
+            r_share: HashMap::new(),
             past_messages: HashSet::new(),
         }
+    }
+    
+    pub fn setup(mut self) -> Self {
+        info!("Setupping party {}", self.id);
+        
+        for gate_id in self.circuit.traverse() {
+            if matches!(self.circuit.get_gate(gate_id), gate::Gate::Mul { first: _, second: _, output: _ }) {
+                debug!("Party {} preparing r_shares for gate({})", self.id, gate_id);
+
+                let r = self.field.random();
+                debug!("Party{}: gate({}) r = {}", self.id, gate_id, r);
+                let s_poly = polynomial::Polynomial::random(r.clone(), self.threshold, self.field.clone());
+                let t_poly = polynomial::Polynomial::random(r, self.threshold * 2, self.field.clone());
+
+                let s_shares = self.broadcast_poly(s_poly, gate_id);
+                let t_shares = self.broadcast_poly(t_poly, gate_id);
+                
+                self.r_share.insert(gate_id, (
+                    s_shares.into_iter().fold(DataType::from(0), |a, b| self.field.add(a, b)),
+                    t_shares.into_iter().fold(DataType::from(0), |a, b| self.field.add(a, b))
+                ));
+
+                debug!("Party{}: gate({}) r_share = {:?}", self.id, gate_id, self.r_share[&gate_id]);
+            }
+        }
+
+        info!("Party {} setup finished", self.id);
+
+        self
     }
 
     pub fn run(mut self) -> Vec<DataType> {
@@ -67,7 +98,9 @@ where DataType: field::FieldElement +
             n_gates += 1;
         }
 
-        let results = circuit.get_roots().iter().map(|gate_id| self.process_output(n_gates, circuit.get_gate(*gate_id).get_output())).collect();
+        let results = circuit.get_roots().into_iter().map(
+            |gate_id| self.process_output(n_gates + gate_id, circuit.get_gate(gate_id).get_output())
+        ).collect();
 
         info!("Party {} finished with output {:?}", self.id, results);
 
@@ -129,45 +162,21 @@ where DataType: field::FieldElement +
     }
 
     fn process_mul(&mut self, gate_id: usize, first: &gate::Gate<DataType>, second: &gate::Gate<DataType>) -> DataType {
-        let c = self.field.mul(first.get_output(), second.get_output());
+        let c_share = self.field.mul(first.get_output(), second.get_output());
 
-        debug!("Party{}: process_mul({}, {}, {}) c = {}",
-            self.id, gate_id, first.get_output(), second.get_output(), c);
+        debug!("Party{}: process_mul({}, {}, {}) c_share = {}",
+            self.id, gate_id, first.get_output(), second.get_output(), c_share);
 
-        // TODO: move to setup phase
-        let n_parties = self.circuit.get_n_parties();
-        let poly = polynomial::Polynomial::random(c, self.threshold, self.field.clone());
+        let g_share = self.field.add(c_share, self.r_share[&gate_id].1.clone());
 
-        (0..n_parties)
-                .map(|i| (i, poly.eval(DataType::from(i + 1))))
-                .for_each(|(party, share)| {
-                    let party = party as usize;
-                    if party == self.id {
-                        self.shares[party].insert(gate_id, share);
-                    } else {
-                        debug!("Party{}: process_mul({}) send share {} to Party{}",
-                            self.id, gate_id, share, party);
-                        self.txs[party].send(message::Message::new(self.id, party, gate_id, share));
-                    }
-                });
+        debug!("Party{}: process_mul({}, {}, {}) g_share = {}",
+            self.id, gate_id, first.get_output(), second.get_output(), g_share);
+        
+        let shares = self.broadcast_share(g_share, gate_id);
 
-        (1..n_parties)
-                .for_each(|_| {
-                    let msg = self.safe_recv(gate_id);
-                    debug!("Party{}: process_mul({}) recv share {} from Party{}",
-                                self.id, gate_id, msg.get_share(), msg.get_from());
-                    self.shares[msg.get_from()].insert(gate_id, msg.get_share());
-                });
+        let g = polynomial::Polynomial::interpolate(shares, &self.field, self.circuit.get_n_parties());
 
-        let result = (0..n_parties)
-                .map(|party| (self.shares[party as usize][&gate_id].clone(),
-                                polynomial::Polynomial::lagrange(
-                                    (0..n_parties).map(|i| DataType::from(i + 1)),
-                                    DataType::from(party + 1),
-                                    self.field.clone()
-                                )))
-                .map(|(share, lagr)| self.field.mul(share, lagr))
-                .fold(self.field.zero(), |a, b| self.field.add(a, b));
+        let result = self.field.sub(g, self.r_share[&gate_id].0.clone());
 
         result
     }
@@ -177,35 +186,72 @@ where DataType: field::FieldElement +
 
         debug!("Party{}: process_output({}, {})", self.id, n_gates, output);
 
-        (0..n_parties)
-                .map(|i| (i, output.clone()))
-                .for_each(|(party, share)| {
-                    let party = party as usize;
-                    if party == self.id {
-                        self.shares[party].insert(n_gates, share);
-                    } else {
-                        self.txs[party].send(message::Message::new(self.id, party, n_gates, share));
-                    }
-                });
-
-        (1..n_parties)
-                .for_each(|_| {
-                    let msg = self.safe_recv(n_gates);
-                    self.shares[msg.get_from()].insert(n_gates, msg.get_share());
-                });
+        self.broadcast_share(output.clone(), n_gates)
+            .into_iter()
+            .enumerate()
+            .for_each(|(party, share)| {
+                self.shares[party].insert(n_gates, share);
+            });
 
         debug!("Party{}: interpolating {:?}", self.id, (0..n_parties).map(|p| self.shares[p as usize][&n_gates].clone()).collect::<Vec<_>>());
 
-        let result = (0..n_parties)
-                .map(|party| (self.shares[party as usize][&n_gates].clone(),
-                    polynomial::Polynomial::lagrange(
-                        (0..n_parties).map(|i| DataType::from(i + 1)),
-                        DataType::from(party + 1),
-                        self.field.clone()
-                    )))
-                .map(|(share, lagr)| self.field.mul(share, lagr))
-                .fold(self.field.zero(), |a, b| self.field.add(a, b));
-        
-        result
+        polynomial::Polynomial::interpolate(
+            (0..n_parties as usize).map(|party| self.shares[party][&n_gates].clone()).collect(),
+            &self.field, n_parties
+        )
+    }
+
+    fn broadcast_poly(&mut self, poly: polynomial::Polynomial<DataType>, gate_id: usize) -> Vec<DataType> {
+        let n_parties = self.circuit.get_n_parties();
+        let mut shares = vec![DataType::from(0); n_parties as usize];
+
+        (0..n_parties)
+            .map(|i| (i, poly.eval(DataType::from(i + 1))))
+            .for_each(|(party, share)| {
+                let party = party as usize;
+                if party == self.id {
+                    shares[party] = share;
+                } else {
+                    debug!("Party{}: gate({}) send share {} to Party{}",
+                            self.id, gate_id, share, party);
+                    self.txs[party].send(message::Message::new(self.id, party, gate_id, share));
+                }
+            });
+        (1..n_parties)
+            .for_each(|_| {
+                let msg = self.safe_recv(gate_id);
+                debug!("Party{}: gate({}) recv share {} from Party{}",
+                            self.id, gate_id, msg.get_share(), msg.get_from());
+                shares[msg.get_from()] = msg.get_share();
+            });
+
+        shares
+    }
+
+    fn broadcast_share(&mut self, share: DataType, gate_id: usize) -> Vec<DataType> {
+        let n_parties = self.circuit.get_n_parties();
+        let mut shares = vec![DataType::from(0); n_parties as usize];
+
+        (0..n_parties)
+            .map(|i| (i, share.clone()))
+            .for_each(|(party, share)| {
+                let party = party as usize;
+                if party == self.id {
+                    shares[party] = share;
+                } else {
+                    debug!("Party{}: gate({}) send share {} to Party{}",
+                            self.id, gate_id, share, party);
+                    self.txs[party].send(message::Message::new(self.id, party, gate_id, share));
+                }
+            });
+        (1..n_parties)
+            .for_each(|_| {
+                let msg = self.safe_recv(gate_id);
+                debug!("Party{}: gate({}) recv share {} from Party{}",
+                            self.id, gate_id, msg.get_share(), msg.get_from());
+                shares[msg.get_from()] = msg.get_share();
+            });
+
+        shares
     }
 }

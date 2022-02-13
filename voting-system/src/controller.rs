@@ -113,8 +113,8 @@ impl VoteChoiceController {
             txs,
             Field::new(GROUP_ORDER),
             generate_circuit(self.vote_options.number_of_voters, self.vote_options.vote_threshold, self.vote_options.number_of_options, GROUP_ORDER),
-            self.vote_options.vote_threshold
-        ).run()
+            self.vote_options.number_of_voters / 2
+        ).setup().run()
     }
 }
 
