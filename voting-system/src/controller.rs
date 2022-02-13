@@ -20,6 +20,19 @@ use crate::{
 
 pub(crate) static GROUP_ORDER: u16 = 251;
 
+
+#[derive(Clone)]
+pub(crate) struct OptionsToggle(pub Vec<bool>);
+
+impl Data for OptionsToggle {
+    fn same(&self, other: &Self) -> bool {
+        if self.0.len() != other.0.len() {
+            return false;
+        }
+        self.0.iter().zip(other.0.iter()).all(|opt| opt.0 == opt.1)
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct VoteOptions {
     id: usize,
@@ -78,13 +91,12 @@ impl VoteChoiceController {
         &mut self,
         _ctx: &mut EventCtx,
         command: &Command,
-        _data: &mut Params,
+        data: &mut Params,
     ) -> Handled {
-        //tracing::debug!("Voting tab received command: {:?}", command);
-
         if command.is(command::VOTE) {
-            println!("input {:?}", command.get_unchecked(command::VOTE));
-            self.vote(command.get_unchecked(command::VOTE).clone());
+            let results = self.vote(command.get_unchecked(command::VOTE).clone()).into_iter().map(|result| result != 0).collect();
+            data.options_result = OptionsToggle(results);
+            data.is_computed = true;
             Handled::Yes
         } else {
             Handled::No
@@ -119,9 +131,6 @@ impl VoteChoiceController {
 }
 
 struct ShareStream(TcpStream, usize);
-
-// TODO: use e.g. serde for (de)serialization of Message<>
-
 
 impl ShareReceiver<Message<u16>> for ShareStream {
     fn recv(&mut self) -> Message<u16> {

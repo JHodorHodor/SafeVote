@@ -1,6 +1,6 @@
 use druid::{
 	widget::{prelude::*, Button, Flex, Label, Either},
-	AppLauncher, Widget, WidgetExt, WindowDesc, Data, Lens, Env,
+	AppLauncher, Widget, WidgetExt, WindowDesc, Data, Lens, Env, Color
 };
 use std::net::{TcpStream};
 use std::io::{Read, Write};
@@ -12,24 +12,13 @@ mod command;
 mod controller;
 mod util;
 
-#[derive(Clone)]
-struct OptionsToggle(Vec<bool>);
-
-impl Data for OptionsToggle {
-    fn same(&self, other: &Self) -> bool {
-        if self.0.len() != other.0.len() {
-            return false;
-        }
-        self.0.iter().zip(other.0.iter()).all(|opt| opt.0 == opt.1)
-    }
-}
-
-
 #[derive(Clone, Data, Lens)]
 struct Params {
     is_confirmed: bool,
     options: String,
-    options_toggle: OptionsToggle,
+    options_toggle: controller::OptionsToggle,
+    is_computed: bool,
+    options_result: controller::OptionsToggle,
 }
 
 fn main() {
@@ -83,14 +72,15 @@ fn main() {
 
             // Init UI
 		    let main_window = WindowDesc::new(move || ui_builder(stream, vote_options))
-		        .title("Take a vote!")
+		        .title("Voting App")
 		        .window_size((300.0, 500.0));
 
-		    println!("{}", voting_options);
 		    let params = Params {
 		        is_confirmed: false,
 		        options: voting_options,
-                options_toggle: OptionsToggle(vec![false; number_of_options]),
+                options_toggle: controller::OptionsToggle(vec![false; number_of_options]),
+                is_computed: false,
+                options_result: controller::OptionsToggle(vec![false; number_of_options]),
 		    };
 
 		    AppLauncher::with_window(main_window)
@@ -104,7 +94,6 @@ fn main() {
 }
 
 fn ui_builder(stream: TcpStream, vote_options: controller::VoteOptions) -> impl Widget<Params> {
-    println!("UI");
     let buttons_group = (0..vote_options.get_number_of_options()).fold(
     	Flex::column(),
     	|column, i| column.with_child(
@@ -118,30 +107,77 @@ fn ui_builder(stream: TcpStream, vote_options: controller::VoteOptions) -> impl 
                     }
                 ).on_click(
                     move |_ctx: &mut EventCtx, data: &mut Params, _env| data.options_toggle.0[i] = false
-                ),
+                ).border(Color::rgb(0.0, 0.0, 0.3), 2.0).padding(10.0).expand_width(),
                 Button::new(
                     move |data: &Params, _env: &Env| data.options.split(",").collect::<Vec<&str>>()[i].to_string()
                 ).on_click(
                     move |_ctx: &mut EventCtx, data: &mut Params, _env| data.options_toggle.0[i] = true
-                ),
+                ).border(Color::rgb(0.0, 0.0, 0.3), 2.0).padding(10.0).expand_width(),
             )
     	)
     );
 
-    Flex::column()
+    let label_group = (0..vote_options.get_number_of_options()).fold(
+        Flex::column(),
+        |column, i| column.with_child(
+            Either::new(
+                move |data: &Params, _env: &Env| data.options_toggle.0[i],
+                Either::new(
+                    move |data: &Params, _env: &Env| data.options_result.0[i],
+                    Label::new(
+                        move |data: &Params, _env: &Env| {
+                            let mut label = "-> ".to_owned();
+                            label.push_str(data.options.split(",").collect::<Vec<&str>>()[i]);
+                            label
+                        }
+                    ).center().expand_width().border(Color::rgb(0.0, 0.5, 0.0), 2.0).rounded(5.0).padding(10.0),
+                    Label::new(
+                        move |data: &Params, _env: &Env| {
+                            let mut label = "-> ".to_owned();
+                            label.push_str(data.options.split(",").collect::<Vec<&str>>()[i]);
+                            label
+                        }
+                    ).center().expand_width().border(Color::rgb(0.5, 0.0, 0.0), 2.0).rounded(5.0).padding(10.0),
+                ),
+                Either::new(
+                    move |data: &Params, _env: &Env| data.options_result.0[i],
+                    Label::new(
+                        move |data: &Params, _env: &Env| data.options.split(",").collect::<Vec<&str>>()[i].to_string()
+                    ).center().expand_width().center().border(Color::rgb(0.0, 0.5, 0.0), 2.0).rounded(5.0).padding(10.0),
+                    Label::new(
+                        move |data: &Params, _env: &Env| data.options.split(",").collect::<Vec<&str>>()[i].to_string()
+                    ).center().expand_width().center().border(Color::rgb(0.5, 0.0, 0.0), 2.0).rounded(5.0).padding(10.0),
+
+                ),
+            )
+        )
+    );
+
+    let to_vote_section = Flex::column()
         .with_child(Label::new(|data: &Params, _env: &Env| {
-        	if data.is_confirmed {
-        		"Voted, wait to compute the result!".to_string()
-        	} else {
-        		"Options:".to_string()
-        	}
-        }))
+            if data.is_confirmed {
+                "Voted, wait to compute the result!".to_string()
+            } else {
+                "Options:".to_string()
+            }
+        }).padding(10.0))
         .with_child(buttons_group)
         .with_child(Button::new("Confirm votes").on_click(
             move |ctx: &mut EventCtx, data: &mut Params, _env: &Env| {
-                let x = ctx.submit_command(command::VOTE.with(data.options_toggle.0.clone()));
-                println!("result: {:?}", x);
+                data.is_confirmed = true;
+                ctx.submit_command(command::VOTE.with(data.options_toggle.0.clone()))
             }
+        ));
+
+    let results_section = Flex::column()
+        .with_child(Label::new("Results:").padding(10.0))
+        .with_child(label_group);
+
+    Flex::column()
+        .with_child(Either::new(
+            move |data: &Params, _env: &Env| data.is_computed,
+            results_section,
+            to_vote_section
         ))
 		.controller(controller::VoteChoiceController::new(stream, vote_options))
 }
