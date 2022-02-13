@@ -4,7 +4,7 @@ use std::iter::Iterator;
 
 #[derive(Clone)]
 pub struct Circuit<DataType: Clone> {
-    pub gates: Vec<gate::Gate<DataType>>,
+    gates: Vec<gate::Gate<DataType>>,
     root: usize,
     n_parties: u16,
 }
@@ -28,7 +28,7 @@ impl<DataType: Clone> Circuit<DataType> {
         self.gates.len() - 1
     }
 
-    pub fn get_n_parties(&self) -> u16 {
+    pub(crate) fn get_n_parties(&self) -> u16 {
         self.n_parties
     }
 
@@ -44,69 +44,11 @@ impl<DataType: Clone> Circuit<DataType> {
         &mut self.gates[idx]
     }
 
-    pub fn traverse(&self) -> impl Iterator<Item = (usize, usize)> {
-        /* let mut result = vec![];
-
-        let mut visited = vec![false; self.gates.len()];
-
-        let mut stack = vec![self.root];
-        while let Some(next_idx) = stack.pop() {
-            if !visited[next_idx] {
-                result.push(next_idx);
-
-                match self.gates[next_idx] {
-                    gate::Gate::Add { first, second, output: _ } => {
-                        stack.push(first);
-                        stack.push(second);
-                    },
-                    gate::Gate::Mul { first, second, output: _ } => {
-                        stack.push(first);
-                        stack.push(second);
-                    },
-                    gate::Gate::MulByConst { first, second: _, output: _ } => {
-                        stack.push(first);
-                    },
-                    _ => {}
-                }
-
-                visited[next_idx] = true;
-            }
-        }
-
-        println!("traverse: {:?}", result);
-        
-        result.into_iter().rev().enumerate() */
-
-        let mut stack = vec![];
-        let mut visited = vec![false; self.gates.len()];
-
-        self.topological_sort(self.root, &mut visited, &mut stack);
-
-        stack.into_iter().enumerate()
+    pub fn traverse(&self) -> impl Iterator<Item = usize> {
+        (0..self.gates.len()).into_iter()
     }
 
-    fn topological_sort(&self, gate: usize, visited: &mut Vec<bool>, stack: &mut Vec<usize>) {
-        if visited[gate] {
-            return;
-        }
-
-        visited[gate] = true;
-
-        match self.gates[gate] {
-            gate::Gate::Add { first, second, output: _ } => {
-                self.topological_sort(first, visited, stack);
-                self.topological_sort(second, visited, stack);
-            },
-            gate::Gate::Mul { first, second, output: _ } => {
-                self.topological_sort(first, visited, stack);
-                self.topological_sort(second, visited, stack);
-            },
-            gate::Gate::MulByConst { first, second: _, output: _ } => {
-                self.topological_sort(first, visited, stack);
-            },
-            _ => {}
-        }
-
-        stack.push(gate);
+    pub fn size(&self) -> usize {
+        self.gates.len()
     }
 }

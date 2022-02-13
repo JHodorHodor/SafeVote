@@ -75,7 +75,7 @@ impl<DataType: Clone> Gate<DataType> {
     }
 }
 
-impl<DataType: Clone> fmt::Display for Gate<DataType> {
+impl<DataType: Clone> fmt::Debug for Gate<DataType> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Gate::Add {first, second, output: _} => write!(f, "ADD({}, {})", first, second),

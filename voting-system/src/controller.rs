@@ -13,26 +13,40 @@ use mpc::{
     share_sender::ShareSender,
 };
 
-use crate::command;
-use crate::Params;
+use crate::{
+    command, Params,
+    util::generate_circuit,
+};
 
-pub static GROUP_ORDER: u16 = 251;
+pub(crate) static GROUP_ORDER: u16 = 251;
 
 #[derive(Clone)]
-pub struct VoteOptions {
-    pub id: usize,
-    pub number_of_voters: usize,
-    pub vote_threshold: usize,
-    pub number_of_options: usize,
+pub(crate) struct VoteOptions {
+    id: usize,
+    number_of_voters: usize,
+    vote_threshold: usize,
+    number_of_options: usize,
 }
 
-pub struct VoteChoiceController {
+impl VoteOptions {
+    pub(crate) fn new(id: usize, number_of_voters: usize, vote_threshold: usize, number_of_options: usize) -> Self {
+        VoteOptions {
+            id, number_of_voters, vote_threshold, number_of_options
+        }
+    }
+
+    pub(crate) fn get_number_of_options(&self) -> usize {
+        self.number_of_options
+    }
+}
+
+pub(crate) struct VoteChoiceController {
     stream: TcpStream,
     vote_options: VoteOptions
 }
 
 impl VoteChoiceController {
-    pub fn new(stream: TcpStream, vote_options: VoteOptions) -> Self {
+    pub(crate) fn new(stream: TcpStream, vote_options: VoteOptions) -> Self {
         VoteChoiceController {
             stream,
             vote_options,
@@ -59,8 +73,6 @@ where
     }
 }
 
-use crate::util::generate_circuit;
-
 impl VoteChoiceController {
     fn command(
         &mut self,
@@ -79,8 +91,7 @@ impl VoteChoiceController {
     }
 
     fn vote(&mut self, input: u16) -> u16 {
-        let voted_info = b"VOTED";
-        self.stream.write(voted_info).unwrap();
+        self.stream.write(b"VOTED").unwrap();
 
         let mut data = [0 as u8; 500];
 
@@ -89,15 +100,15 @@ impl VoteChoiceController {
             Err(_) => println!("Error"),
         };
 
-        let rx = ShareStream(self.stream.try_clone().unwrap(), self.vote_options.number_of_voters);
-        let txs: Vec<Box<(dyn ShareSender<Message<u16>> + 'static)>> = (0..self.vote_options.number_of_voters).map(
-            |_a| Box::new(ShareStream(self.stream.try_clone().unwrap(), self.vote_options.number_of_voters)) as _
+        let rx = Box::new(ShareStream(self.stream.try_clone().unwrap(), self.vote_options.id));
+        let txs = (0..self.vote_options.number_of_voters).map(
+            |id| Box::new(ShareStream(self.stream.try_clone().unwrap(), id)) as _
         ).collect();
 
         Party::new(
             self.vote_options.id,
             input,
-            Box::new(rx),
+            rx,
             txs,
             Field::new(GROUP_ORDER),
             generate_circuit(self.vote_options.number_of_voters, self.vote_options.vote_threshold, self.vote_options.number_of_options, GROUP_ORDER),
@@ -115,7 +126,7 @@ impl ShareReceiver<Message<u16>> for ShareStream {
     fn recv(&mut self) -> Message<u16> {
         let mut data = [0u8; std::mem::size_of::<Message<u16>>()];
 
-        self.0.read_exact(&mut data).unwrap_or_else(|_e| { println!("Error recv"); });
+        self.0.read_exact(&mut data).unwrap_or_else(|_e| println!("Error recv"));
         unsafe { std::mem::transmute(data) }
     }
 }
@@ -129,7 +140,7 @@ unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
 
 impl ShareSender<Message<u16>> for ShareStream {
     fn send(&mut self, msg: Message<u16>) {
-        let data = [&(msg.to as u32).to_be_bytes()[..], unsafe { any_as_u8_slice(&msg) }].concat();
+        let data = [&(self.1 as u32).to_be_bytes()[..], unsafe { any_as_u8_slice(&msg) }].concat();
         self.0.write(&data).unwrap_or_else(|_e| { println!("Error send"); 0 });
     }
 }
