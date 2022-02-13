@@ -19,7 +19,6 @@ pub(crate) fn generate_circuit(number_of_voters: usize, vote_threshold: usize, n
                     |acc, item| circuit.add(Gate::new_mul(acc, item))
                 )
             ).map(Option::unwrap).collect();
-    //println!("last_and_gates: {:?}", last_and_gates);
 
         let mul_last_gates: Vec<usize> = (1..last_and_gates.len() + 1).map(
                 |l| last_and_gates.clone().into_iter().combinations(l).map(
@@ -36,7 +35,6 @@ pub(crate) fn generate_circuit(number_of_voters: usize, vote_threshold: usize, n
                 ).collect::<Vec<_>>()
             ).flatten()
             .collect();
-    //println!("mul_last_gates: {:?}", mul_last_gates);
 
             mul_last_gates.into_iter().reduce(|acc, item| circuit.add(Gate::new_add(acc, item))).unwrap()
     }).collect();

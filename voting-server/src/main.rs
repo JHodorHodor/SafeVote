@@ -21,8 +21,6 @@ struct VoteOptions {
 
 fn initialize_client(mut stream: TcpStream, VOTE_OPTIONS: VoteOptions) {
 
-    println!("initializing: {} {} {}", VOTE_OPTIONS.expected_voters, VOTE_OPTIONS.vote_threshold, VOTE_OPTIONS.options);
-
     stream.write(&(VOTE_OPTIONS.expected_voters as u32).to_be_bytes()).unwrap();
 
     stream.write(&(VOTE_OPTIONS.vote_threshold as u32).to_be_bytes()).unwrap();
@@ -32,7 +30,6 @@ fn initialize_client(mut stream: TcpStream, VOTE_OPTIONS: VoteOptions) {
     let mut data = [0 as u8; 500];
     match stream.read(&mut data) {
         Ok(size) => {
-            println!("{}", from_utf8(&data[0..size]).unwrap());
             if from_utf8(&data[0..size]).unwrap() == "VOTED" {
                 GLOBAL_VOTERS_COUNT.fetch_add(1, Ordering::SeqCst);
                 if GLOBAL_VOTERS_COUNT.load(Ordering::SeqCst) >= VOTE_OPTIONS.expected_voters {       
@@ -121,8 +118,6 @@ fn main() {
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
-                println!("New voter: {}", stream.peer_addr().unwrap());
-                println!("{}", GLOBAL_VOTERS_COUNT.load(Ordering::SeqCst));
                 if GLOBAL_VOTERS_COUNT.load(Ordering::SeqCst) >= EXPECTED_VOTERS {
                     println!("All voters have voted!");
 

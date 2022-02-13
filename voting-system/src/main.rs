@@ -34,7 +34,6 @@ fn main() {
 
     match TcpStream::connect("localhost:3333") {
         Ok(mut stream) => {
-            println!("Successfully connected to server in port 3333");
 
             // Send party id to server
             let id_bytes = (id as u32).to_be_bytes();
@@ -67,8 +66,6 @@ fn main() {
             let vote_options = controller::VoteOptions::new(
                 id, number_of_voters, vote_threshold, number_of_options
             );
-
-		    println!("Options received: number of voters: {};  vote threshold: {}; voting options: {}.", number_of_voters, vote_threshold, voting_options);
 
             // Init UI
 		    let main_window = WindowDesc::new(move || ui_builder(stream, vote_options))
