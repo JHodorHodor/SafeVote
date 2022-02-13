@@ -174,7 +174,8 @@ where DataType: field::FieldElement +
         
         let shares = self.broadcast_share(g_share, gate_id);
 
-        let g = polynomial::Polynomial::interpolate(shares, &self.field, self.circuit.get_n_parties());
+        let g = polynomial::Polynomial::interpolate(shares, &self.field,
+            self.circuit.get_n_parties() as usize, |x| DataType::from(x as u16));
 
         let result = self.field.sub(g, self.r_share[&gate_id].0.clone());
 
@@ -182,7 +183,7 @@ where DataType: field::FieldElement +
     }
     
     fn process_output(&mut self, n_gates: usize, output: DataType) -> DataType {
-        let n_parties = self.circuit.get_n_parties();
+        let n_parties = self.circuit.get_n_parties() as usize;
 
         debug!("Party{}: process_output({}, {})", self.id, n_gates, output);
 
@@ -193,11 +194,11 @@ where DataType: field::FieldElement +
                 self.shares[party].insert(n_gates, share);
             });
 
-        debug!("Party{}: interpolating {:?}", self.id, (0..n_parties).map(|p| self.shares[p as usize][&n_gates].clone()).collect::<Vec<_>>());
+        debug!("Party{}: interpolating {:?}", self.id, (0..n_parties).map(|p| self.shares[p][&n_gates].clone()).collect::<Vec<_>>());
 
         polynomial::Polynomial::interpolate(
-            (0..n_parties as usize).map(|party| self.shares[party][&n_gates].clone()).collect(),
-            &self.field, n_parties
+            (0..n_parties).map(|party| self.shares[party][&n_gates].clone()).collect(),
+            &self.field, n_parties, |x| DataType::from(x as u16)
         )
     }
 

@@ -1,5 +1,3 @@
-use std::fmt;
-
 #[derive(Clone)]
 pub enum Gate<DataType: Clone> {
     Add {
@@ -73,17 +71,6 @@ impl<DataType: Clone> Gate<DataType> {
             Gate::Add { first: _, second: _, output } => *output = Some(value),
             Gate::MulByConst {first: _, second: _, output } => *output = Some(value),
             Gate::Mul { first: _, second: _, output } => *output = Some(value)
-        }
-    }
-}
-
-impl<DataType: Clone> fmt::Debug for Gate<DataType> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Gate::Add {first, second, output: _} => write!(f, "ADD({}, {})", first, second),
-            Gate::MulByConst {first, second: _, output: _} => write!(f, "MULC({})", first),
-            Gate::Mul {first, second, output: _} => write!(f, "MUL({}, {})", first, second),
-            Gate::Input {party, circuit_id, output: _} => write!(f, "INPUT(from party {} for option {})", party, circuit_id),
         }
     }
 }

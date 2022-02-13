@@ -12,9 +12,7 @@ pub trait FieldElement: Add<Output = Self> +
                         One +
                         Clone +
                         rand::distributions::uniform::SampleUniform
-where Self: Sized {
-
-}
+where Self: Sized {}
 
 impl<T> FieldElement for T
 where T: Add<Output = T> +
@@ -25,9 +23,7 @@ where T: Add<Output = T> +
          Zero +
          One +
          Clone +
-         rand::distributions::uniform::SampleUniform {
-             
-         }
+         rand::distributions::uniform::SampleUniform {}
 
 #[derive(Clone)]
 pub struct Field<DataType> {
@@ -74,22 +70,13 @@ impl<DataType: FieldElement> Field<DataType> {
     }
 
     fn normalize(&self, a: DataType) -> DataType {
-        // TODO: negative?
+        // NOTE: DataType is assumed to be nonnegative
         a % self.order.clone()
     }
 
     fn pow(&self, a: DataType, b: DataType) -> DataType {
         let mut result = self.one();
         
-        // TODO: binpow
-        /* while b != self.zero() {
-            if b & 1 != self.zero() {
-                result = self.mul(result, a);
-            }
-            b >>= 1;
-            a = self.mul(a, a);
-        } */
-
         let mut counter = self.zero();
         while counter != b {
             result  = self.mul(result, a.clone());
@@ -97,5 +84,53 @@ impl<DataType: FieldElement> Field<DataType> {
         }
 
         result
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::Field;
+
+    #[test]
+    fn test_zero() {
+        let field = Field::new(13u8);
+        assert_eq!(field.zero(), 0u8);
+    }
+
+    #[test]
+    fn test_one() {
+        let field = Field::new(13u8);
+        assert_eq!(field.one(), 1u8);
+    }
+
+    #[test]
+    fn test_add() {
+        let field = Field::new(13u8);
+        assert_eq!(field.add(7u8, 8u8), 2u8);
+    }
+
+    #[test]
+    fn test_sub() {
+        let field = Field::new(13u8);
+        assert_eq!(field.sub(7u8, 8u8), 12u8);
+    }
+
+    #[test]
+    fn test_mul() {
+        let field = Field::new(13u8);
+        assert_eq!(field.mul(7u8, 8u8), 4u8);
+    }
+
+    #[test]
+    fn test_inv() {
+        let field = Field::new(13u8);
+        assert_eq!(field.inv(7u8), 2u8);
+    }
+
+    #[test]
+    fn test_random() {
+        let mut field = Field::new(13u8);
+        assert!(field.random() < 13u8);
     }
 }
