@@ -1,24 +1,14 @@
 use druid::{
     widget::{prelude::*, Controller},
-    Command, Handled,
+    Command, Handled, ExtEventSink, Target,
 };
 use std::net::{TcpStream};
-use std::io::{Read, Write};
-
-use mpc::{
-    party::Party,
-    field::Field,
-    message::Message,
-    share_receiver::ShareReceiver,
-    share_sender::ShareSender,
-};
 
 use crate::{
     command, Params,
-    util::generate_circuit,
+    vote_options::VoteOptions,
+    vote,
 };
-
-pub(crate) static GROUP_ORDER: u16 = 251;
 
 
 #[derive(Clone)]
@@ -30,26 +20,6 @@ impl Data for OptionsToggle {
             return false;
         }
         self.0.iter().zip(other.0.iter()).all(|opt| opt.0 == opt.1)
-    }
-}
-
-#[derive(Clone)]
-pub(crate) struct VoteOptions {
-    id: usize,
-    number_of_voters: usize,
-    vote_threshold: usize,
-    number_of_options: usize,
-}
-
-impl VoteOptions {
-    pub(crate) fn new(id: usize, number_of_voters: usize, vote_threshold: usize, number_of_options: usize) -> Self {
-        VoteOptions {
-            id, number_of_voters, vote_threshold, number_of_options
-        }
-    }
-
-    pub(crate) fn get_number_of_options(&self) -> usize {
-        self.number_of_options
     }
 }
 
@@ -89,74 +59,30 @@ where
 impl VoteChoiceController {
     fn command(
         &mut self,
-        _ctx: &mut EventCtx,
+        ctx: &mut EventCtx,
         command: &Command,
         data: &mut Params,
     ) -> Handled {
         if command.is(command::VOTE) {
-            let results = self.vote(command.get_unchecked(command::VOTE).clone()).into_iter().map(|result| result != 0).collect();
-            data.options_result = OptionsToggle(results);
+            data.is_computed = false;
+            self.vote_wrapper(ctx.get_external_handle(), command.get_unchecked(command::VOTE).clone());
+            Handled::Yes
+        } else if command.is(command::VOTE_OUTPUT) {
             data.is_computed = true;
+            data.options_result = OptionsToggle(command.get_unchecked(command::VOTE_OUTPUT).clone());
             Handled::Yes
         } else {
             Handled::No
         }
     }
 
-    fn vote(&mut self, input: Vec<bool>) -> Vec<u16> {
-        self.stream.write(b"VOTED").unwrap();
-
-        let mut data = [0 as u8; 500];
-
-        match self.stream.read(&mut data) {
-            Ok(_) => println!("Protocol started!"),
-            Err(_) => println!("Error"),
-        };
-
-        let rx = Box::new(ShareStream(self.stream.try_clone().unwrap(), self.vote_options.id));
-        let txs = (0..self.vote_options.number_of_voters).map(
-            |id| Box::new(ShareStream(self.stream.try_clone().unwrap(), id)) as _
-        ).collect();
-
-        Party::new(
-            self.vote_options.id,
-            input.into_iter().map(u16::from).collect(),
-            rx,
-            txs,
-            Field::new(GROUP_ORDER),
-            generate_circuit(self.vote_options.number_of_voters, self.vote_options.vote_threshold, self.vote_options.number_of_options, GROUP_ORDER),
-            self.vote_options.number_of_voters / 2
-        ).setup().run()
-    }
-}
-
-struct ShareStream(TcpStream, usize);
-
-type Msg = Message<u16>;
-
-impl ShareReceiver<Msg> for ShareStream {
-    fn recv(&mut self) -> Msg {
-        let mut data = [0u8; std::mem::size_of::<Msg>()];
-
-        self.0.read_exact(&mut data).unwrap_or_else(|_e| println!("Error recv"));
-        unsafe { std::mem::transmute(data) }
-    }
-}
-
-unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
-    ::std::slice::from_raw_parts(
-        (p as *const T) as *const u8,
-        ::std::mem::size_of::<T>(),
-    )
-}
-
-impl ShareSender<Msg> for ShareStream {
-    fn send(&mut self, msg: Msg) {
-        let data = [
-            &(self.1 as u64).to_be_bytes()[..],
-            &(std::mem::size_of::<Msg>() as u64).to_be_bytes(),
-            unsafe { any_as_u8_slice(&msg) }
-        ].concat();
-        self.0.write(&data).unwrap_or_else(|_e| { println!("Error send"); 0 });
+    fn vote_wrapper(&mut self, sink: ExtEventSink, input: Vec<bool>) {
+        let vote_options = self.vote_options.clone();
+        let stream = self.stream.try_clone().unwrap();
+        std::thread::spawn(move || {
+            let results: Vec<bool> = vote::vote(input, vote_options, stream)
+                .into_iter().map(|result| result != 0).collect();
+            sink.submit_command(command::VOTE_OUTPUT, results, Target::Auto).unwrap();
+        });
     }
 }

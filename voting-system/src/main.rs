@@ -10,6 +10,8 @@ use std::convert::TryInto;
 
 mod command;
 mod controller;
+mod vote_options;
+mod vote;
 mod util;
 
 #[derive(Clone, Data, Lens)]
@@ -63,7 +65,7 @@ fn main() {
             };
 
             let number_of_options = voting_options.split(",").collect::<Vec<&str>>().len();
-            let vote_options = controller::VoteOptions::new(
+            let vote_options = vote_options::VoteOptions::new(
                 id, number_of_voters, vote_threshold, number_of_options
             );
 
@@ -90,7 +92,7 @@ fn main() {
     }
 }
 
-fn ui_builder(stream: TcpStream, vote_options: controller::VoteOptions) -> impl Widget<Params> {
+fn ui_builder(stream: TcpStream, vote_options: vote_options::VoteOptions) -> impl Widget<Params> {
     let buttons_group = (0..vote_options.get_number_of_options()).fold(
     	Flex::column(),
     	|column, i| column.with_child(
