@@ -8,25 +8,57 @@ mod tests {
         field::Field,
     };
     use crate::util::generate_circuit;
-    
+
     #[test]
-    fn test_circuit() {
-        let mut circuit = generate_circuit(4, 1, 2, 251);
-        println!("{:?}", run(circuit, 251));
+    fn test_circuit_1() {
+        let number_of_voters = 5;
+        let vote_threshold = 3;
+        let number_of_options = 1;
+        let group_order: u16 = 251;
+        let input = vec![1u16, 0u16, 1u16, 1u16, 0u16];
+
+        let circuit = generate_circuit(number_of_voters, vote_threshold, number_of_options, group_order);
+        
+        assert_eq!(run(circuit, 251, input), 1)
+    }
+
+    #[test]
+    fn test_circuit_2() {
+        let number_of_voters = 5;
+        let vote_threshold = 2;
+        let number_of_options = 1;
+        let group_order: u16 = 251;
+        let input = vec![0u16, 0u16, 1u16, 1u16, 1u16];
+
+        let circuit = generate_circuit(number_of_voters, vote_threshold, number_of_options, group_order);
+
+        assert_eq!(run(circuit, 251, input), 1)
+    }
+
+    #[test]
+    fn test_circuit_3() {
+        let number_of_voters = 5;
+        let vote_threshold = 4;
+        let number_of_options = 1;
+        let group_order: u16 = 251;
+        let input = vec![0u16, 0u16, 1u16, 1u16, 0u16];
+
+        let circuit = generate_circuit(number_of_voters, vote_threshold, number_of_options, group_order);
+
+        assert_eq!(run(circuit, 251, input), 0)
     }
 
 
-    pub fn run(cir: Circuit<u16>, field_order: u16) -> u16 {
+    pub fn run(cir: Circuit<u16>, field_order: u16, input: Vec<u16>) -> u16 {
 
         let field = Field::<u16>::new(field_order);
 
-        let mut n_gates = 0;
         let mut circuit = cir.clone();
-        for (gate_id, gate_loc) in circuit.traverse() {
+        for (_gate_id, gate_loc) in circuit.traverse() {
 
             let output = match circuit.get_gate(gate_loc) {
                 Gate::Input { ref party, output: _ } => {
-                    process_input(*party)
+                    *input.get(*party).unwrap()
                 }
                 Gate::Add { ref first, ref second, output: _ } => {
                     process_add(circuit.get_gate(*first), circuit.get_gate(*second), &field)
@@ -40,29 +72,8 @@ mod tests {
             };
 
             circuit.get_gate_mut(gate_loc).set_output(output);
-
-            n_gates += 1;
         }
-
-        let output = circuit.get_root().get_output();
-
-        println!("Finished with output {}", output);
-
-        output
-    }
-
-    fn process_input(party: usize) -> u16 {
-        if party == 0 {
-            return 0u16;
-        } else if party == 1 {
-            return 0u16;
-        } else if party == 2 {
-            return 0u16;
-        } else if party == 3 {
-            return 0u16;
-        } else {
-            return 0u16;
-        }
+        circuit.get_root().get_output()
     }
 
     fn process_add(first: &Gate<u16>, second: &Gate<u16>, field: &Field<u16>) -> u16 {
