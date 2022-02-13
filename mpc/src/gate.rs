@@ -22,15 +22,17 @@ pub enum Gate<DataType: Clone> {
 
     Input {
         party: usize,
+        circuit_id: usize,
         output: Option<DataType>
     }
 }
 
 impl<DataType: Clone> Gate<DataType> {
 
-    pub fn new_input(party: usize) -> Self {
+    pub fn new_input(party: usize, circuit_id: usize) -> Self {
         Gate::Input {
             party,
+            circuit_id,
             output: None
         }
     }
@@ -58,7 +60,7 @@ impl<DataType: Clone> Gate<DataType> {
 
     pub fn get_output(&self) -> DataType {
         match self {
-            Gate::Input { party: _, output } => (*output).clone().unwrap(),
+            Gate::Input { party: _, circuit_id: _, output } => (*output).clone().unwrap(),
             Gate::Add { first: _, second: _, output } => (*output).clone().unwrap(),
             Gate::MulByConst {first: _, second: _, output } => (*output).clone().unwrap(),
             Gate::Mul { first: _, second: _, output } => (*output).clone().unwrap()
@@ -67,7 +69,7 @@ impl<DataType: Clone> Gate<DataType> {
 
     pub fn set_output(&mut self, value: DataType) {
         match self {
-            Gate::Input { party: _, output } => *output = Some(value),
+            Gate::Input { party: _, circuit_id: _, output } => *output = Some(value),
             Gate::Add { first: _, second: _, output } => *output = Some(value),
             Gate::MulByConst {first: _, second: _, output } => *output = Some(value),
             Gate::Mul { first: _, second: _, output } => *output = Some(value)
@@ -81,7 +83,7 @@ impl<DataType: Clone> fmt::Display for Gate<DataType> {
             Gate::Add {first, second, output: _} => write!(f, "ADD({}, {})", first, second),
             Gate::MulByConst {first, second: _, output: _} => write!(f, "MULC({})", first),
             Gate::Mul {first, second, output: _} => write!(f, "MUL({}, {})", first, second),
-            Gate::Input {party, output: _} => write!(f, "INPUT({})", party),
+            Gate::Input {party, circuit_id, output: _} => write!(f, "INPUT(from party {} for option {})", party, circuit_id),
         }
     }
 }

@@ -5,7 +5,7 @@ use std::iter::Iterator;
 #[derive(Clone)]
 pub struct Circuit<DataType: Clone> {
     pub gates: Vec<gate::Gate<DataType>>,
-    root: usize,
+    roots: Vec<usize>,
     n_parties: u16,
 }
 
@@ -14,13 +14,13 @@ impl<DataType: Clone> Circuit<DataType> {
     pub fn new(n_parties: u16) -> Self {
         Circuit {
             gates: vec![],
-            root: 0, 
+            roots: vec![], 
             n_parties
         }
     }
 
-    pub fn set_root(&mut self, gate_idx: usize) {
-        self.root = gate_idx;
+    pub fn set_roots(&mut self, gate_ids: Vec<usize>) {
+        self.roots = gate_ids;
     }
 
     pub fn add(&mut self, gate: gate::Gate<DataType>) -> usize {
@@ -32,8 +32,8 @@ impl<DataType: Clone> Circuit<DataType> {
         self.n_parties
     }
 
-    pub fn get_root(&self) -> &gate::Gate<DataType> {
-        self.get_gate(self.root)
+    pub fn get_roots(&self) -> Vec<usize> {
+        self.roots.clone()
     }
 
     pub fn get_gate(&self, idx: usize) -> &gate::Gate<DataType> {
@@ -80,7 +80,7 @@ impl<DataType: Clone> Circuit<DataType> {
         let mut stack = vec![];
         let mut visited = vec![false; self.gates.len()];
 
-        self.topological_sort(self.root, &mut visited, &mut stack);
+        self.roots.iter().for_each(|root_id| self.topological_sort(*root_id, &mut visited, &mut stack));
 
         stack.into_iter().enumerate()
     }
